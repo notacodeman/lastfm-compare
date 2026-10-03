@@ -3,7 +3,7 @@
 import { $, esc, fmt, fmtDate, fitRows } from './util.js';
 import { PANEL_ROWS } from './config.js';
 import { summarize, bucketAxis, countByBucket, bucketKey } from './analyze.js';
-import { artistDetail, artistRank } from './lifetime.js';
+import { artistDetail, artistRank } from './artist.js';
 import { lineChart, drawResponsive } from './charts.js';
 
 const swatch = slot => `<span class="swatch" style="--color:var(--person-${slot})"></span>`;

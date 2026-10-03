@@ -34,7 +34,6 @@
   <div class="view-tabs" role="tablist" aria-label="View">
    <button type="button" role="tab" data-view="compare">Compare</button>
    <button type="button" role="tab" data-view="report">Reports</button>
-   <button type="button" role="tab" data-view="alltime">All time</button>
   </div>
 
   <div id="compareView">
@@ -211,71 +210,6 @@
     <h2>Listening fingerprint</h2>
     <p class="note">The same period for everyone you've added.</p>
     <div class="panel" id="rFingerprintPanel"></div>
-   </section>
-  </div>
-
-  <div id="alltimeView" hidden>
-   <div class="controls" role="group" aria-label="All-time settings">
-    <div class="control">
-     <span class="control-label">Person</span>
-     <div class="segmented" id="alltimePerson"></div>
-    </div>
-    <div class="control">
-     <span class="control-label">Export</span>
-     <button type="button" class="btn" id="csvExport">Download scrobbles as CSV</button>
-    </div>
-   </div>
-
-   <section class="section" id="aRecords">
-    <h2 id="alltimeTitle">All time</h2>
-    <div class="tiles" id="aTiles"></div>
-   </section>
-
-   <section class="section" id="aMilestones">
-    <h2>Milestones</h2>
-    <div class="panel table-panel"><div class="hscroll"><div class="table" id="aMilestoneTable"></div></div></div>
-   </section>
-
-   <section class="section" id="aCalendar">
-    <div class="section-head">
-     <h2>Every day</h2>
-     <div class="section-tools"><select id="calendarYear" aria-label="Year"></select></div>
-    </div>
-    <div class="panel">
-     <div class="chart-scroll"><div class="calendar" id="aCalendarChart"></div></div>
-     <div class="legend heat-row" id="aCalendarLegend"></div>
-    </div>
-   </section>
-
-   <section class="section" id="aClock">
-    <h2>Hour by weekday, all time</h2>
-    <div class="panel">
-     <div class="chart-scroll"><div id="aGrid"></div></div>
-     <div class="legend heat-row" id="aGridLegend"></div>
-    </div>
-   </section>
-
-   <section class="section" id="aYears">
-    <h2>Top artists by year</h2>
-    <p class="note">Point at an artist to follow it across the years. Newest year first.</p>
-    <div class="panel"><div class="hscroll" id="aYearGrid"></div></div>
-   </section>
-
-   <section class="section" id="aForgotten">
-    <h2>Forgotten favourites and comebacks</h2>
-    <p class="note">Forgotten: 25+ plays, none in the last year. Comebacks: back after a year or more away, with 10+ plays since; sorted by plays since coming back.</p>
-    <div class="two-grid">
-     <div class="panel list-panel" id="aForgottenList"></div>
-     <div class="panel list-panel" id="aComebackList"></div>
-    </div>
-   </section>
-
-   <section class="section" id="aObsessions">
-    <h2>Obsessions</h2>
-    <div class="two-grid">
-     <div class="panel list-panel" id="aDayObsessions"></div>
-     <div class="panel list-panel" id="aRuns"></div>
-    </div>
    </section>
   </div>
 

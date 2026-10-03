@@ -195,18 +195,13 @@ select { padding-right: 28px; }
 /* ---------- Overlap ---------- */
 
 .overlap-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: 16px; }
+.overlap-grid.single { grid-template-columns: minmax(0, 1fr); }
 @media (max-width: 760px) { .overlap-grid { grid-template-columns: minmax(0, 1fr); } }
 .venn { width: 100%; max-width: 420px; display: block; margin: 0 auto; }
 .venn text { fill: var(--ink); font-size: 15px; font-weight: 700; text-anchor: middle; dominant-baseline: middle; }
 .venn text.venn-name { font-size: 13px; font-weight: 600; fill: var(--muted); }
 
 .big-number { font-size: clamp(2.4rem, 8vw, 3.6rem); font-weight: 700; color: var(--ink); line-height: 1; margin: 6px 0 8px; }
-.matrix { border-collapse: separate; border-spacing: 2px; margin-top: 4px; }
-.matrix th { font-size: .8rem; color: var(--muted); font-weight: 600; padding: 4px 6px; white-space: nowrap; }
-.matrix thead th { text-align: center; }
-.matrix th[scope="row"] { text-align: right; }
-.matrix td { width: 4.2em; height: 2.4em; text-align: center; border-radius: 4px; font-weight: 600; font-size: .85rem; }
-.matrix td.self { background: var(--panel2); color: var(--dim); }
 
 /* label / bar / value rows */
 .bar-rows { display: grid; gap: 6px; }
@@ -415,27 +410,7 @@ select { padding-right: 28px; }
 .back-btn { margin-top: 20px; }
 #artistTitle { font-size: clamp(1.5rem, 4.5vw, 2.1rem); }
 
-/* ---------- All time ---------- */
 
-.calendar, #aGrid { position: relative; }
-.calendar-svg { display: block; }
-.calendar-svg text { fill: var(--muted); font-size: 10px; }
-.heat-row { justify-content: space-between; align-items: center; margin: 12px 0 0; color: var(--muted); font-size: .85rem; }
-.heat-legend { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); font-size: .8rem; }
-.heat-legend i { width: 12px; height: 12px; border-radius: 3px; display: inline-block; }
-.week-hour { display: grid; grid-template-columns: 2.6em repeat(24, minmax(16px, 1fr)); gap: 3px; min-width: 560px; font-size: .75rem; color: var(--muted); }
-.week-hour i { aspect-ratio: 1.25; border-radius: 3px; min-height: 14px; }
-.wh-hour { text-align: left; white-space: nowrap; }
-.wh-day { align-self: center; }
-
-.year-grid { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(190px, 1fr); gap: 0 14px; }
-.year-col ol { list-style: none; margin: 0; padding: 0; counter-reset: rank; }
-.year-head { color: var(--ink); font-weight: 700; padding-bottom: 6px; margin-bottom: 4px; border-bottom: 1px solid var(--rule); }
-.year-head .item-sub { display: inline; margin-left: 6px; }
-.year-col li { display: grid; grid-template-columns: 1.4em minmax(0, 1fr) auto; gap: 4px; padding: 3px 4px; border-radius: 4px; font-size: .88rem; }
-.year-col li::before { counter-increment: rank; content: counter(rank); color: var(--dim); font-size: .8rem; }
-.year-col li .item-sub { display: inline; }
-.year-col li.lit { background: var(--accent-soft); box-shadow: inset 2px 0 var(--accent); color: var(--ink); }
 
 /* ---------- Dialog ---------- */
 

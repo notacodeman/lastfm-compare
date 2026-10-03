@@ -1,6 +1,6 @@
 // Page state, events and the order things happen in. The maths is in analyze.js, the HTML in render.js.
 
-import { $, esc, nowSec } from './util.js';
+import { $, esc, nowSec, download as saveFile } from './util.js';
 import { MAX_PEOPLE, DAILY_CHART_UP_TO_DAYS, GENRE_ARTISTS } from './config.js';
 import { fetchProfile, fetchHistory } from './history.js';
 import { clearAll } from './store.js';
@@ -9,8 +9,8 @@ import { renderPeople, renderProgress, renderStats, renderTags, renderOverlap, r
 import { lineChart, drawResponsive } from './charts.js';
 import { UNITS, periodFromKey, reportPeriod, shiftPeriod, periodLabel, rowsBetween } from './report.js';
 import { renderReport, periodOptions, currentReport as shownReport } from './report-view.js';
-import { renderAllTime, exportCsv } from './alltime-view.js';
 import { renderArtist } from './artist-view.js';
+import { toCsv } from './artist.js';
 import { saveReportImage } from './share-card.js';
 import { genreShares, topArtists } from './genres.js';
 import { loadTags, tagsFor } from './genre-loader.js';
@@ -27,14 +27,13 @@ const state = {
   sharedBy: '2',
   sort: null,         // null = shared by most people, then most plays together
   search: '',
-  view: 'compare',    // 'compare' | 'report' | 'alltime' | 'artist'
-  report: { person: null, unit: 'month', key: null },   // person is shared with All time; key null = current period
-  calendarYear: null, // All time calendar; null = this year
+  view: 'compare',    // 'compare' | 'report' | 'artist'
+  report: { person: null, unit: 'month', key: null },   // key null = the current period
   compatWith: null,   // whose compatibility over time to show (3+ people)
   artist: null,       // artist page
   returnView: 'compare',
 };
-const VIEWS = ['compare', 'report', 'alltime', 'artist'];
+const VIEWS = ['compare', 'report', 'artist'];
 let view = null;      // the last comparison, reused when only the search or sort changes
 let genreRun = 0;     // bumps on every redraw so late tag answers for an old view are dropped
 
@@ -47,7 +46,6 @@ function readUrl() {
   if (MIN_PLAYS.includes(q.get('m'))) state.minPlays = +q.get('m');
   if (VIEWS.includes(q.get('v'))) state.view = q.get('v');
   if (q.get('a')) state.artist = q.get('a');
-  if (+q.get('cy')) state.calendarYear = +q.get('cy');
   if (state.view === 'artist' && !state.artist) state.view = 'compare';
   if (q.get('r')) state.report.person = q.get('r').toLowerCase();
   if (UNITS.includes(q.get('ru'))) state.report.unit = q.get('ru');
@@ -62,7 +60,7 @@ function writeUrl() {
   if (state.period !== 'all') q.set('p', state.period);
   if (state.minPlays !== 1) q.set('m', state.minPlays);
   if (state.view !== 'compare') q.set('v', state.view);
-  if (state.view === 'report' || state.view === 'alltime') {
+  if (state.view === 'report') {
     const person = state.people.find(p => p.key === state.report.person);
     if (person) q.set('r', person.profile?.name || person.username);
   }
@@ -70,7 +68,6 @@ function writeUrl() {
     if (state.report.unit !== 'month') q.set('ru', state.report.unit);
     if (state.report.key) q.set('rk', state.report.key);
   }
-  if (state.view === 'alltime' && state.calendarYear) q.set('cy', state.calendarYear);
   if (state.view === 'artist') q.set('a', state.artist);
   const search = q.toString().replace(/%2C/g, ',');
   history.replaceState(null, '', search ? `?${search}` : location.pathname);
@@ -114,8 +111,7 @@ async function download(person) {
       onProgress: progress => { person.progress = progress; renderProgress(person); },
     });
     person.summaries = new Map();
-    person.first = null;      // first-play dates, rebuilt for reports when needed
-    person.lifetime = null;   // All time results, rebuilt when needed
+    person.first = null;   // first-play dates, rebuilt for reports when needed
     person.status = 'ready';
   } catch (err) {
     if (controller.signal.aborted) return;
@@ -135,6 +131,9 @@ function onPersonAction(event) {
       person.controller.abort();
       person.status = 'paused';
       break;
+    case 'csv':
+      saveFile(`scrobbles-${person.profile.name}.csv`, toCsv(person.rows), 'text/csv');
+      return;
     case 'resume':
     case 'refresh':
       download(person);
@@ -190,7 +189,6 @@ function update() {
   showView();
   if (!people.length) { view = null; return; }
   if (state.view === 'report') { renderReportView(); return; }
-  if (state.view === 'alltime') { renderAllTime({ person: focusPerson(), calendarYear: state.calendarYear }); renderPersonPicker('#alltimePerson'); return; }
   if (state.view === 'artist') { renderArtist({ people, name: state.artist }); return; }
   $('#compareNeedsTwo').hidden = people.length >= 2;
   $('#compareBody').hidden = people.length < 2;
@@ -202,7 +200,7 @@ function update() {
   const range = periodRange(state.period, now);
   const summaries = people.map(p => summaryFor(p, range));
   const result = compare(summaries, state.kind, state.minPlays);
-  const matrix = summaries.map(a => summaries.map(b => overlap(a, b, state.kind)));
+  const common = summaries.length === 2 ? overlap(summaries[0], summaries[1], state.kind) : null;
 
   const foundFirst = people.map(() => 0);
   for (const row of result.shared) foundFirst[row.foundFirst]++;
@@ -222,7 +220,7 @@ function update() {
 
   view = { people, summaries, result, range };
   renderStats(people, stats, state.kind);
-  renderOverlap(people, result, matrix, state.kind);
+  renderOverlap(people, result, common, state.kind);
   renderSharedView();
   renderUnique(people, result.unique, state.kind);
   renderLegend(people);
@@ -343,11 +341,10 @@ function showView() {
   document.querySelectorAll('.view-tabs [data-view]').forEach(t => t.setAttribute('aria-selected', t.dataset.view === tab));
   $('#compareView').hidden = state.view !== 'compare';
   $('#reportView').hidden = state.view !== 'report';
-  $('#alltimeView').hidden = state.view !== 'alltime';
   $('#artistView').hidden = state.view !== 'artist';
 }
 
-// The person shown in Reports and All time.
+// The person shown in Reports.
 function focusPerson() {
   const people = ready();
   return people.find(p => p.key === state.report.person) || people[0];
@@ -436,14 +433,6 @@ document.querySelector('.view-tabs').addEventListener('click', event => {
   if (!tab || tab.dataset.view === state.view) return;
   setView(tab.dataset.view);
 });
-$('#alltimePerson').addEventListener('click', event => {
-  const key = event.target.closest('[data-person]')?.dataset.person;
-  if (!key) return;
-  state.report.person = key;
-  setView('alltime');
-});
-$('#calendarYear').addEventListener('change', event => { state.calendarYear = +event.target.value; setView('alltime'); });
-$('#csvExport').addEventListener('click', () => { const person = focusPerson(); if (person) exportCsv(person); });
 $('#saveImage').addEventListener('click', async event => {
   const shown = shownReport();
   if (!shown) return;

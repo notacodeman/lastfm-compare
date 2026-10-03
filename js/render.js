@@ -2,7 +2,7 @@
 
 import { $, esc, fmt, fmtDate, fmtMonth, fitRows, artistLink } from './util.js';
 import { TABLE_ROWS, PANEL_ROWS, MAX_RENDERED_ROWS, GENRES_SHOWN } from './config.js';
-import { vennSvg, sharedByBars, overlapMatrix } from './charts.js';
+import { vennSvg, sharedByBars } from './charts.js';
 
 const color = slot => `var(--person-${slot})`;
 const swatch = slot => `<span class="swatch" style="--color:${color(slot)}"></span>`;
@@ -13,6 +13,7 @@ const ICONS = {
   refresh: '<path d="M13.5 8a5.5 5.5 0 1 1-1.6-3.9M13.5 2.5v3h-3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
   pause: '<path d="M5.5 3.5v9M10.5 3.5v9" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>',
   remove: '<path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/>',
+  csv: '<path d="M8 2.5v8M4.5 7 8 10.5 11.5 7M3 13.5h10" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>',
 };
 const iconButton = (action, label) =>
   `<button type="button" class="icon-btn" data-action="${action}" title="${label}" aria-label="${label}"><svg viewBox="0 0 16 16">${ICONS[action === 'resume' ? 'refresh' : action]}</svg></button>`;
@@ -30,7 +31,7 @@ export function renderPeople(people) {
       loading: iconButton('pause', 'Pause download'),
       paused: iconButton('resume', 'Resume download'),
       error: iconButton('resume', 'Try again'),
-      ready: iconButton('refresh', 'Fetch new scrobbles'),
+      ready: iconButton('csv', 'Download scrobbles as CSV') + iconButton('refresh', 'Fetch new scrobbles'),
     }[person.status] + iconButton('remove', 'Remove');
     return `
       <li class="person" data-key="${esc(person.key)}" style="--color:${color(person.slot)}">
@@ -63,7 +64,7 @@ function statusText(person) {
       return `Downloading page ${fmt(p.pagesDone)} of ${fmt(p.totalPages)} · ${fmt(p.scrobbles)} scrobbles`;
     case 'paused': return `Paused at ${fmt(p?.scrobbles || 0)} scrobbles`;
     case 'error': return person.error;
-    case 'ready': return `${fmt(person.rows.length)} scrobbles · saved in this browser`;
+    case 'ready': return `${fmt(person.rows.length)} scrobbles saved`;
   }
   return '';
 }
@@ -101,27 +102,24 @@ export function renderTags(index, tags) {
 
 // ---------- Overlap
 
-export function renderOverlap(people, result, matrix, kind) {
+export function renderOverlap(people, result, common, kind) {
   const noun = NOUN[kind];
   const counted = [...result.regions.values()].reduce((a, b) => a + b, 0);
+  const everyone = result.regions.get((1 << people.length) - 1) || 0;
   $('#vennPanel').innerHTML = people.length <= 3
-    ? `<h3>Who has which ${noun}</h3>${vennSvg(people, result.regions, noun)}<p class="note">Circles aren't drawn to scale. ${fmt(counted)} ${noun} in total.</p>`
+    ? `<h3>Who has which ${noun}</h3>${vennSvg(people, result.regions, noun)}<p class="note">Circles aren't drawn to scale. ${fmt(counted)} ${noun} in total${people.length > 2 ? `, ${fmt(everyone)} shared by everyone` : ''}.</p>`
     : sharedByBars(people, result.regions, noun);
 
-  if (people.length === 2) {
-    const value = matrix[0][1];
-    $('#matchPanel').innerHTML = `
-      <h3>Listening in common</h3>
-      <div class="big-number">${Math.round(value * 100)}%</div>
-      <p class="note">Of each person's plays, the share that goes to ${noun} the other also plays, counting the smaller share of each. 100% would mean identical listening.</p>
-      <p>${fmt(result.shared.length)} shared ${noun}</p>`;
-  } else {
-    const everyone = result.regions.get((1 << people.length) - 1) || 0;
-    $('#matchPanel').innerHTML = `
-      <h3>Listening in common, by pair</h3>
-      ${overlapMatrix(people, matrix)}
-      <p class="note">Of each pair's plays, the share that goes to ${noun} both play, counting the smaller share of each. ${fmt(everyone)} ${noun} are shared by everyone.</p>`;
-  }
+  // "Listening in common" only for two people; for more, see compatibility over time.
+  const match = $('#matchPanel');
+  match.hidden = common == null;
+  match.closest('.overlap-grid').classList.toggle('single', common == null);
+  if (common == null) return;
+  match.innerHTML = `
+    <h3>Listening in common</h3>
+    <div class="big-number">${Math.round(common * 100)}%</div>
+    <p class="note">Of each person's plays, the share that goes to ${noun} the other also plays, counting the smaller share of each. 100% would mean identical listening.</p>
+    <p>${fmt(result.shared.length)} shared ${noun}</p>`;
 }
 
 // ---------- Shared table

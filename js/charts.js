@@ -57,18 +57,6 @@ export function sharedByBars(people, regions, noun) {
   return `<h3>How many of you have each of the ${noun}</h3><div class="bar-rows">${rows}</div>`;
 }
 
-// ---------- Pairwise overlap matrix (3+ people). Neutral shading so it never reads as one person's colour.
-
-export function overlapMatrix(people, matrix) {
-  const max = Math.max(0.01, ...matrix.flatMap((row, i) => row.filter((_, j) => j !== i)));
-  const head = people.map(p => `<th scope="col"><span class="swatch" style="--color:${color(p.slot)}"></span>${esc(p.profile.name)}</th>`).join('');
-  const body = people.map((p, i) => `<tr><th scope="row">${esc(p.profile.name)}<span class="swatch" style="--color:${color(p.slot)};margin:0 0 0 6px"></span></th>${
-    matrix[i].map((value, j) => i === j ? '<td class="self">—</td>'
-      : `<td style="background:color-mix(in oklab, #ffffff ${Math.round(4 + 26 * value / max)}%, var(--panel2))" title="${esc(p.profile.name)} and ${esc(people[j].profile.name)}: ${Math.round(value * 100)}% overlap">${Math.round(value * 100)}%</td>`).join('')
-  }</tr>`).join('');
-  return `<div class="hscroll"><table class="matrix"><thead><tr><th></th>${head}</tr></thead><tbody>${body}</tbody></table></div>`;
-}
-
 // ---------- Timeline: one line per person, with a crosshair tooltip listing everyone and the total
 
 const MARGIN = { top: 12, right: 14, bottom: 28, left: 52 };
@@ -302,80 +290,4 @@ export function stackedShareChart(container, { labels, series, tooltip, height =
       <div class="tooltip" hidden></div>`;
     attachTooltip(container, container.querySelector('svg'), bands, tooltip);
   });
-}
-
-// ---------- Heatmaps (calendar and hour-by-weekday): one hue, darker = less, in five steps
-
-const HEAT_STEPS = [22, 40, 58, 78, 100];   // % of the person's colour mixed into the empty-cell colour
-
-// Thresholds from the non-zero counts' quantiles, so one huge day doesn't wash out the rest.
-function heatLevels(counts) {
-  const sorted = counts.filter(c => c > 0).sort((a, b) => a - b);
-  if (!sorted.length) return () => -1;
-  const cuts = [0.2, 0.4, 0.6, 0.8].map(q => sorted[Math.floor(q * (sorted.length - 1))]);
-  return count => count <= 0 ? -1 : cuts.filter(c => count > c).length;
-}
-const heatFill = (slot, level) => level < 0 ? 'var(--panel2)' : `color-mix(in oklab, var(--person-${slot}) ${HEAT_STEPS[level]}%, var(--panel2))`;
-
-export function heatLegend(slot) {
-  return `<span class="heat-legend">Less ${HEAT_STEPS.map((_, i) => `<i style="background:${heatFill(slot, i)}"></i>`).join('')} More</span>`;
-}
-
-// Shows the tooltip for any [data-tip] element under the pointer.
-function attachTips(container) {
-  const tooltip = container.querySelector('.tooltip');
-  container.addEventListener('pointerover', event => {
-    const cell = event.target.closest('[data-tip]');
-    if (!cell) { tooltip.hidden = true; return; }
-    tooltip.innerHTML = cell.dataset.tip;
-    tooltip.hidden = false;
-    const box = container.getBoundingClientRect(), r = cell.getBoundingClientRect();
-    const left = r.right - box.left + 6;
-    tooltip.style.left = `${left + tooltip.offsetWidth > box.width ? r.left - box.left - tooltip.offsetWidth - 6 : left}px`;
-    tooltip.style.top = `${Math.max(0, r.top - box.top - 8)}px`;
-  });
-  container.addEventListener('pointerleave', () => { tooltip.hidden = true; });
-}
-
-// days: Map 'YYYY-MM-DD' -> count. Weeks run Monday to Sunday, top to bottom.
-export function calendarHeatmap(container, { year, days, slot }) {
-  const CELL = 13, GAP = 3, LEFT = 30, TOP = 18;
-  const start = new Date(year, 0, 1);
-  const offset = (start.getDay() + 6) % 7;
-  const cells = [], months = [];
-  const counts = [];
-  for (const d = new Date(start); d.getFullYear() === year; d.setDate(d.getDate() + 1)) {
-    const index = offset + Math.round((d - start) / 86400000);
-    const key = `${year}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-    const count = days.get(key) || 0;
-    counts.push(count);
-    cells.push({ week: Math.floor(index / 7), weekday: index % 7, count, label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) });
-    if (d.getDate() === 1) months.push({ week: Math.floor(index / 7), name: d.toLocaleDateString('en-US', { month: 'short' }) });
-  }
-  const level = heatLevels(counts);
-  const weeks = cells.at(-1).week + 1;
-  const width = LEFT + weeks * (CELL + GAP), height = TOP + 7 * (CELL + GAP);
-  container.innerHTML = `
-    <svg class="calendar-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Scrobbles per day in ${year}">
-      ${months.map(m => `<text x="${LEFT + m.week * (CELL + GAP)}" y="11">${m.name}</text>`).join('')}
-      ${['Mon', '', 'Wed', '', 'Fri', '', ''].map((d, i) => d ? `<text x="0" y="${TOP + i * (CELL + GAP) + CELL - 2}">${d}</text>` : '').join('')}
-      ${cells.map(c => `<rect x="${LEFT + c.week * (CELL + GAP)}" y="${TOP + c.weekday * (CELL + GAP)}" width="${CELL}" height="${CELL}" rx="3" fill="${heatFill(slot, level(c.count))}" data-tip="<b>${c.label}</b>${fmt(c.count)} scrobbles"/>`).join('')}
-    </svg>
-    <div class="tooltip" hidden></div>`;
-  attachTips(container);
-}
-
-// grid: 7 x 24 counts, Monday first.
-export function weekHourHeatmap(container, { grid, slot }) {
-  const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const hour = h => `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
-  const level = heatLevels(grid.flat());
-  container.innerHTML = `
-    <div class="week-hour">
-      <span></span>${Array.from({ length: 24 }, (_, h) => `<span class="wh-hour">${h % 3 ? '' : hour(h)}</span>`).join('')}
-      ${grid.map((row, d) => `<span class="wh-day">${DAYS[d]}</span>${row.map((count, h) =>
-        `<i style="background:${heatFill(slot, level(count))}" data-tip="<b>${DAYS[d]} ${hour(h)}–${hour((h + 1) % 24)}</b>${fmt(count)} scrobbles"></i>`).join('')}`).join('')}
-    </div>
-    <div class="tooltip" hidden></div>`;
-  attachTips(container);
 }

@@ -1,10 +1,8 @@
 # Scrobble Compare
 
-Compare two to six Last.fm users' full scrobble histories: head-to-head stats, genres, shared and unique artists, albums and tracks, how much your listening overlaps, and scrobbles over time.
+Compare two to six Last.fm users' full scrobble histories (each person's card also has a CSV download): head-to-head stats, genres, shared and unique artists, albums and tracks, how much your listening overlaps, and scrobbles over time.
 
 The **Compare** tab also has **compatibility over time**: the same "listening in common" measure for each calendar year, per pair.
-
-The **All time** tab shows one person's records (longest and current daily streak, biggest day), milestone scrobbles (1st, 1,000th, 10,000th…), a calendar heatmap of every day in a year, an hour-by-weekday heatmap, their top 10 artists for every year side by side, forgotten favourites (25+ plays, none in a year), comebacks (back after a year away with 10+ plays since), obsessions (most plays of a track in a day, longest runs on repeat), and a CSV download of their full history.
 
 Click any **artist name** to open the artist page: plays, rank, first and last play, biggest day, peak month and longest streak for everyone you've added, plays by month as a line per person, and each person's top tracks and albums.
 
@@ -42,12 +40,11 @@ A report for a period still under way is compared with the previous period up to
 | `js/genres.js` | Genre shares and variety from artist tags (no DOM) |
 | `js/genre-loader.js` | Loads artist tags (IndexedDB, then Last.fm) and keeps them in memory |
 | `js/report-view.js` | HTML and charts for the Reports tab |
-| `js/lifetime.js` | All-time maths (no DOM): streaks, milestones, obsessions, forgotten/comebacks, top artists by year, one artist's history, CSV |
-| `js/alltime-view.js` | HTML and charts for the All time tab |
+| `js/artist.js` | One artist's history for one person, and the CSV export (no DOM) |
 | `js/artist-view.js` | The artist page |
 | `js/share-card.js` | Draws a report as a PNG image |
 | `data/genre-tags.js` | Tags that aren't genres, and genre spellings to merge |
-| `js/charts.js` | SVG Venn diagram, "shared by how many" bars, overlap matrix, line, column and stacked-share charts, calendar and hour-by-weekday heatmaps, all with hover tooltips |
+| `js/charts.js` | SVG Venn diagram, "shared by how many" bars, line, column and stacked-share charts, all with hover tooltips |
 | `js/render.js` | HTML for the people cards, stats table, overlap, shared table and unique lists |
 | `js/snap.js` | Gentle snapping onto section headers after the user scrolls |
 | `js/app.js` | State, events, URL state, and the order things run in |
