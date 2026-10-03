@@ -1,6 +1,6 @@
 // Turns state and comparison results into HTML. Each function fills one part of the page.
 
-import { $, esc, fmt, fmtDate, fmtMonth, fitRows } from './util.js';
+import { $, esc, fmt, fmtDate, fmtMonth, fitRows, artistLink } from './util.js';
 import { TABLE_ROWS, PANEL_ROWS, MAX_RENDERED_ROWS, GENRES_SHOWN } from './config.js';
 import { vennSvg, sharedByBars, overlapMatrix } from './charts.js';
 
@@ -88,7 +88,7 @@ export function renderStats(people, stats, kind) {
     row('Albums', stats.map(s => s.albums)),
     row('Tracks', stats.map(s => s.tracks)),
     row(`Played shared ${NOUN[kind]} first`, stats.map(s => s.foundFirst)),
-    textRow('Top artist', stats.map(s => s.topArtist ? `${esc(s.topArtist.name)}<span class="sub">${fmt(s.topArtist.plays)} plays</span>` : '—')),
+    textRow('Top artist', stats.map(s => s.topArtist ? `${artistLink(s.topArtist.name)}<span class="sub">${fmt(s.topArtist.plays)} plays</span>` : '—')),
     textRow('Top genres', stats.map(() => '<span class="sub">…</span>'), 'tags'),
     textRow('Scrobbling since', stats.map(s => fmtDate(s.firstEver))),
   ].join('') + '</tbody>';
@@ -146,7 +146,7 @@ export function renderShared(people, rows, { kind, minPlays, sort, total }) {
   const body = shown.map(row => {
     const first = people[row.foundFirst];
     return `<div class="table-row">
-      <div class="item-name">${esc(row.name)}${row.artist ? `<span class="item-sub">${esc(row.artist)}</span>` : ''}<span class="item-sub first-inline">${swatch(first.slot)}${esc(first.profile.name)} first, ${fmtMonth(row.first[row.foundFirst])}</span></div>
+      <div class="item-name">${row.artist ? esc(row.name) : artistLink(row.name)}${row.artist ? `<span class="item-sub">${artistLink(row.artist)}</span>` : ''}<span class="item-sub first-inline">${swatch(first.slot)}${esc(first.profile.name)} first, ${fmtMonth(row.first[row.foundFirst])}</span></div>
       ${row.plays.map(plays => `<div class="num ${plays === 0 ? 'zero' : plays < minPlays ? 'under' : ''}">${plays ? fmt(plays) : '–'}</div>`).join('')}
       <div class="first-cell">${swatch(first.slot)}${esc(first.profile.name)}<span class="item-sub">${fmtDate(row.first[row.foundFirst])}</span></div>
     </div>`;
@@ -169,7 +169,7 @@ export function renderUnique(people, unique, kind) {
   $('#uniqueGrid').innerHTML = people.map((p, i) => {
     const list = unique[i];
     const items = list.slice(0, MAX_RENDERED_ROWS).map(row => `
-      <li><div><div class="item-name">${esc(row.name)}</div>${row.artist ? `<span class="item-sub">${esc(row.artist)}</span>` : ''}</div>
+      <li><div><div class="item-name">${row.artist ? esc(row.name) : artistLink(row.name)}</div>${row.artist ? `<span class="item-sub">${artistLink(row.artist)}</span>` : ''}</div>
       <span class="num">${fmt(row.plays[i])}</span></li>`).join('');
     return `<div class="panel" style="--color:${color(p.slot)}">
       <h3><span>${esc(p.profile.name)}</span><small>${fmt(list.length)}</small></h3>

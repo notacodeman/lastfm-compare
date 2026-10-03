@@ -45,3 +45,17 @@ export function fitRows(box, rows) {
   observer.observe(box);
   fitted.set(box, observer);
 }
+
+// An artist name that opens the artist page (handled by one click listener in app.js).
+export const artistLink = name => `<button type="button" class="artist-link" data-artist="${esc(name)}">${esc(name)}</button>`;
+
+// Save text or a blob as a file.
+export function download(filename, content, type = 'text/plain') {
+  const blob = content instanceof Blob ? content : new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const a = Object.assign(document.createElement('a'), { href: url, download: filename });
+  document.body.append(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}

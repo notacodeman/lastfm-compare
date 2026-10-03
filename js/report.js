@@ -7,7 +7,7 @@ import { nameKey, summarize } from './analyze.js';
 export const UNITS = ['week', 'month', 'year'];
 const DAY_MS = 86400000;
 const pad = n => String(n).padStart(2, '0');
-const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+export const dayKey = d => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
 
 // ---------- Periods
 

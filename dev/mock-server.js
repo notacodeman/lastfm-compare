@@ -49,16 +49,24 @@ function historyFor(name) {
   const start = now - Math.floor((2 + r() * 10) * 365 * 86400);
   const count = 2000 + Math.floor(r() * 30000);
   // Everyone draws from the same pool, each with their own favourites and a long tail.
-  const favourites = Array.from({ length: 120 }, () => Math.floor(Math.pow(r(), 1.6) * ARTISTS.length));
+  // Taste drifts: three eras, each with its own favourites, plus some always-favourites.
+  const pick = () => Math.floor(Math.pow(r(), 1.6) * ARTISTS.length);
+  const always = Array.from({ length: 40 }, pick);
+  const eras = [0, 1, 2].map(() => always.concat(Array.from({ length: 80 }, pick)));
+  const times = Array.from({ length: count }, () => start + Math.floor(Math.pow(r(), 0.8) * (now - start))).sort((x, y) => x - y);
   const rows = [];
-  for (let i = 0; i < count; i++) {
+  let previous = null;
+  for (const uts of times) {
+    // sometimes the same track again straight away (obsessions)
+    if (previous && r() < 0.08) { rows.push({ ...previous, uts }); continue; }
+    const favourites = eras[Math.min(2, Math.floor(((uts - start) / (now - start)) * 3))];
     const artist = ARTISTS[favourites[Math.floor(Math.pow(r(), 2.2) * favourites.length)]];
     const a = hash(artist);
     const album = `${WORDS[a % WORDS.length]} ${['Sessions', 'Songs', 'Nights'][Math.floor(r() * 3)]}`;
     const track = `${WORDS[(a + Math.floor(r() * 9)) % WORDS.length]} ${NOUNS[(a >>> 3) % NOUNS.length].replace(/s$/, '')} ${1 + Math.floor(r() * 4)}`;
-    rows.push({ uts: start + Math.floor(Math.pow(r(), 0.8) * (now - start)), artist, track, album });
+    rows.push(previous = { uts, artist, track, album });
   }
-  rows.sort((x, y) => y.uts - x.uts);   // newest first, like Last.fm
+  rows.reverse();   // newest first, like Last.fm
   const user = { name, rows, registered: start - 86400 * 30 };
   histories.set(key, user);
   return user;

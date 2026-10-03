@@ -6,9 +6,12 @@ import { fetchProfile, fetchHistory } from './history.js';
 import { clearAll } from './store.js';
 import { KINDS, periodRange, summarize, compare, overlap, perDay, countByBucket, bucketAxis, bucketKey, nameKey } from './analyze.js';
 import { renderPeople, renderProgress, renderStats, renderTags, renderOverlap, renderShared, renderUnique, renderLegend, renderGenreCompare } from './render.js';
-import { lineChart } from './charts.js';
-import { UNITS, periodFromKey, reportPeriod, shiftPeriod, periodLabel } from './report.js';
-import { renderReport, periodOptions } from './report-view.js';
+import { lineChart, drawResponsive } from './charts.js';
+import { UNITS, periodFromKey, reportPeriod, shiftPeriod, periodLabel, rowsBetween } from './report.js';
+import { renderReport, periodOptions, currentReport as shownReport } from './report-view.js';
+import { renderAllTime, exportCsv } from './alltime-view.js';
+import { renderArtist } from './artist-view.js';
+import { saveReportImage } from './share-card.js';
 import { genreShares, topArtists } from './genres.js';
 import { loadTags, tagsFor } from './genre-loader.js';
 import { enableSectionSnap } from './snap.js';
@@ -24,9 +27,14 @@ const state = {
   sharedBy: '2',
   sort: null,         // null = shared by most people, then most plays together
   search: '',
-  view: 'compare',    // or 'report'
-  report: { person: null, unit: 'month', key: null },   // key null = the current period
+  view: 'compare',    // 'compare' | 'report' | 'alltime' | 'artist'
+  report: { person: null, unit: 'month', key: null },   // person is shared with All time; key null = current period
+  calendarYear: null, // All time calendar; null = this year
+  compatWith: null,   // whose compatibility over time to show (3+ people)
+  artist: null,       // artist page
+  returnView: 'compare',
 };
+const VIEWS = ['compare', 'report', 'alltime', 'artist'];
 let view = null;      // the last comparison, reused when only the search or sort changes
 let genreRun = 0;     // bumps on every redraw so late tag answers for an old view are dropped
 
@@ -37,7 +45,10 @@ function readUrl() {
   if (KINDS.includes(q.get('k'))) state.kind = q.get('k');
   if (q.get('p')) state.period = q.get('p');
   if (MIN_PLAYS.includes(q.get('m'))) state.minPlays = +q.get('m');
-  if (q.get('v') === 'report') state.view = 'report';
+  if (VIEWS.includes(q.get('v'))) state.view = q.get('v');
+  if (q.get('a')) state.artist = q.get('a');
+  if (+q.get('cy')) state.calendarYear = +q.get('cy');
+  if (state.view === 'artist' && !state.artist) state.view = 'compare';
   if (q.get('r')) state.report.person = q.get('r').toLowerCase();
   if (UNITS.includes(q.get('ru'))) state.report.unit = q.get('ru');
   if (q.get('rk')) state.report.key = q.get('rk');
@@ -50,13 +61,17 @@ function writeUrl() {
   if (state.kind !== 'artists') q.set('k', state.kind);
   if (state.period !== 'all') q.set('p', state.period);
   if (state.minPlays !== 1) q.set('m', state.minPlays);
-  if (state.view === 'report') {
-    q.set('v', 'report');
+  if (state.view !== 'compare') q.set('v', state.view);
+  if (state.view === 'report' || state.view === 'alltime') {
     const person = state.people.find(p => p.key === state.report.person);
     if (person) q.set('r', person.profile?.name || person.username);
+  }
+  if (state.view === 'report') {
     if (state.report.unit !== 'month') q.set('ru', state.report.unit);
     if (state.report.key) q.set('rk', state.report.key);
   }
+  if (state.view === 'alltime' && state.calendarYear) q.set('cy', state.calendarYear);
+  if (state.view === 'artist') q.set('a', state.artist);
   const search = q.toString().replace(/%2C/g, ',');
   history.replaceState(null, '', search ? `?${search}` : location.pathname);
 }
@@ -99,7 +114,8 @@ async function download(person) {
       onProgress: progress => { person.progress = progress; renderProgress(person); },
     });
     person.summaries = new Map();
-    person.first = null;   // first-play dates, rebuilt for reports when needed
+    person.first = null;      // first-play dates, rebuilt for reports when needed
+    person.lifetime = null;   // All time results, rebuilt when needed
     person.status = 'ready';
   } catch (err) {
     if (controller.signal.aborted) return;
@@ -174,6 +190,8 @@ function update() {
   showView();
   if (!people.length) { view = null; return; }
   if (state.view === 'report') { renderReportView(); return; }
+  if (state.view === 'alltime') { renderAllTime({ person: focusPerson(), calendarYear: state.calendarYear }); renderPersonPicker('#alltimePerson'); return; }
+  if (state.view === 'artist') { renderArtist({ people, name: state.artist }); return; }
   $('#compareNeedsTwo').hidden = people.length >= 2;
   $('#compareBody').hidden = people.length < 2;
   if (people.length < 2) { view = null; return; }
@@ -209,7 +227,51 @@ function update() {
   renderUnique(people, result.unique, state.kind);
   renderLegend(people);
   drawTimeline();
+  drawCompatibility(people);
   loadCompareGenres(people, summaries);
+}
+
+// Listening in common for each calendar year (same measure as the Overlap section, all years).
+function yearSummary(person, year) {
+  const key = `year:${year}`;
+  if (!person.summaries.has(key)) {
+    const rows = rowsBetween(person.rows, new Date(year, 0, 1) / 1000, new Date(year + 1, 0, 1) / 1000 - 1);
+    person.summaries.set(key, summarize(rows, { from: -Infinity, to: Infinity }));
+  }
+  return person.summaries.get(key);
+}
+
+function drawCompatibility(people) {
+  const withRows = people.filter(p => p.rows.length);
+  if (withRows.length < 2) return;
+  const firstYear = Math.min(...withRows.map(p => new Date(p.rows[0][0] * 1000).getFullYear()));
+  const years = [];
+  for (let y = firstYear; y <= new Date().getFullYear(); y++) years.push(String(y));
+  const focus = withRows.find(p => p.key === state.compatWith) || withRows[0];
+  const picker = $('#compatPerson');
+  picker.hidden = withRows.length < 3;
+  picker.innerHTML = withRows.map(p => `<option value="${p.key}" ${p === focus ? 'selected' : ''}>${esc(p.profile.name)} with everyone</option>`).join('');
+  const pairs = withRows.length === 2 ? [[withRows[0], withRows[1]]] : withRows.filter(p => p !== focus).map(p => [focus, p]);
+  const series = pairs.map(([a, b]) => ({
+    name: withRows.length === 2 ? `${a.profile.name} & ${b.profile.name}` : `with ${b.profile.name}`,
+    slot: b.slot,
+    color: withRows.length === 2 ? 'var(--text)' : undefined,
+    values: years.map(y => {
+      const sa = yearSummary(a, +y), sb = yearSummary(b, +y);
+      return sa.scrobbles && sb.scrobbles ? overlap(sa, sb, state.kind) : null;
+    }),
+  }));
+  // start at the first year two people both scrobbled
+  const start = Math.max(0, years.findIndex((_, i) => series.some(s => s.values[i] != null)));
+  years.splice(0, start);
+  series.forEach(s => s.values.splice(0, start));
+  const top = Math.max(0.1, ...series.flatMap(s => s.values).filter(v => v != null));
+  $('#compatLegend').innerHTML = series.map(s => `<span><span class="swatch" style="--color:${s.color || `var(--person-${s.slot})`}"></span>${esc(s.name)}</span>`).join('');
+  $('#compatNote').textContent = `Listening in common for ${state.kind} in each calendar year, measured the same way as above. Gaps are years when one of you didn't scrobble.`;
+  drawResponsive($('#compatChart'), () => lineChart($('#compatChart'), {
+    keys: years, series, labelFor: key => key, showTotal: false, max: top,
+    format: v => `${Math.round(v * 100)}%`,
+  }));
 }
 
 // Shared table only: search, sort and "shared by" don't need the comparison redone.
@@ -277,14 +339,43 @@ async function loadCompareGenres(people, summaries) {
 // ---------- Views
 
 function showView() {
-  document.querySelectorAll('.view-tabs [data-view]').forEach(tab => tab.setAttribute('aria-selected', tab.dataset.view === state.view));
-  $('#compareView').hidden = state.view === 'report';
+  const tab = state.view === 'artist' ? state.returnView : state.view;
+  document.querySelectorAll('.view-tabs [data-view]').forEach(t => t.setAttribute('aria-selected', t.dataset.view === tab));
+  $('#compareView').hidden = state.view !== 'compare';
   $('#reportView').hidden = state.view !== 'report';
+  $('#alltimeView').hidden = state.view !== 'alltime';
+  $('#artistView').hidden = state.view !== 'artist';
+}
+
+// The person shown in Reports and All time.
+function focusPerson() {
+  const people = ready();
+  return people.find(p => p.key === state.report.person) || people[0];
+}
+
+function renderPersonPicker(selector) {
+  const person = focusPerson();
+  $(selector).innerHTML = ready().map(p =>
+    `<button type="button" data-person="${p.key}" aria-pressed="${p === person}"><span class="swatch" style="--color:var(--person-${p.slot})"></span>${esc(p.profile.name)}</button>`).join('');
+}
+
+function setView(next) {
+  if (next !== 'artist') state.returnView = next;
+  state.view = next;
+  writeUrl();
+  update();
+}
+
+function openArtist(name) {
+  if (state.view !== 'artist') state.returnView = state.view;
+  state.artist = name;
+  setView('artist');
+  scrollTo({ top: $('#results').offsetTop - 8 });
 }
 
 function currentReport() {
   const people = ready();
-  const person = people.find(p => p.key === state.report.person) || people[0];
+  const person = focusPerson();
   const now = nowSec();
   const period = periodFromKey(state.report.unit, state.report.key) || reportPeriod(state.report.unit, new Date(now * 1000));
   return { people, person, period, now };
@@ -293,8 +384,7 @@ function currentReport() {
 function renderReportView() {
   const { people, person, period, now } = currentReport();
   if (!person) return;
-  $('#reportPerson').innerHTML = people.map(p =>
-    `<button type="button" data-person="${p.key}" aria-pressed="${p === person}"><span class="swatch" style="--color:var(--person-${p.slot})"></span>${esc(p.profile.name)}</button>`).join('');
+  renderPersonPicker('#reportPerson');
   document.querySelectorAll('#reportUnit button').forEach(b => b.setAttribute('aria-pressed', b.dataset.unit === period.unit));
   const options = periodOptions(person, period.unit, now);
   if (!options.some(o => o.key === period.key)) options.unshift(period);
@@ -344,9 +434,40 @@ $('#sharedTable').addEventListener('click', event => {
 document.querySelector('.view-tabs').addEventListener('click', event => {
   const tab = event.target.closest('[data-view]');
   if (!tab || tab.dataset.view === state.view) return;
-  state.view = tab.dataset.view;
-  writeUrl();
-  update();
+  setView(tab.dataset.view);
+});
+$('#alltimePerson').addEventListener('click', event => {
+  const key = event.target.closest('[data-person]')?.dataset.person;
+  if (!key) return;
+  state.report.person = key;
+  setView('alltime');
+});
+$('#calendarYear').addEventListener('change', event => { state.calendarYear = +event.target.value; setView('alltime'); });
+$('#csvExport').addEventListener('click', () => { const person = focusPerson(); if (person) exportCsv(person); });
+$('#saveImage').addEventListener('click', async event => {
+  const shown = shownReport();
+  if (!shown) return;
+  const button = event.target;
+  button.disabled = true;
+  button.textContent = 'Preparing image…';
+  try {
+    if (!shown.genres.length) {   // genres may still be loading; the image waits for them
+      const artists = topArtists(shown.report.summary, GENRE_ARTISTS);
+      await loadTags(artists.map(a => a.name));
+      shown.genres = genreShares(artists, tagsFor).shares.slice(0, 3).map(g => g.name);
+    }
+    await saveReportImage(shown);
+  } finally {
+    button.disabled = false;
+    button.textContent = 'Save as image';
+  }
+});
+$('#compatPerson').addEventListener('change', event => { state.compatWith = event.target.value; drawCompatibility(ready()); });
+$('#artistBack').addEventListener('click', () => setView(state.returnView));
+// Artist names anywhere on the page open the artist page.
+document.addEventListener('click', event => {
+  const link = event.target.closest('[data-artist]');
+  if (link) { event.preventDefault(); openArtist(link.dataset.artist); }
 });
 $('#reportPerson').addEventListener('click', event => {
   const key = event.target.closest('[data-person]')?.dataset.person;

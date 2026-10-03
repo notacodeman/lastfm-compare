@@ -1,6 +1,6 @@
 // The Reports tab: one person's week, month or year, compared with the period before.
 
-import { $, esc, fmt, fmtDate, fitRows } from './util.js';
+import { $, esc, fmt, fmtDate, fitRows, artistLink } from './util.js';
 import { PANEL_ROWS, GENRE_ARTISTS, GENRE_ARTISTS_PER_MONTH, GENRES_SHOWN, GENRES_STACKED } from './config.js';
 import { buildReport, monthsAround, monthRow, periodLabel, shiftPeriod, reportPeriod, firstPlays } from './report.js';
 import { genreShares, genreVariety, topArtists } from './genres.js';
@@ -18,6 +18,8 @@ const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 const hourLabel = h => `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
 
 let run = 0;   // drops genre results that arrive after the report has changed
+let shown = null;   // the report on screen, for "Save as image"
+export const currentReport = () => shown;
 
 export function firstPlaysFor(person) {
   person.first ??= firstPlays(person.rows);
@@ -27,6 +29,7 @@ export function firstPlaysFor(person) {
 // people: everyone ready; person: whose report; period: from report.js; now: unix seconds
 export function renderReport({ people, person, period, now, onOpenMonth }) {
   const report = buildReport(person.rows, period, firstPlaysFor(person), now);
+  shown = { report, person, genres: [] };
   const ongoing = period.end / 1000 > now;
   const prevName = previousName(report.previous);
 
@@ -76,7 +79,7 @@ function renderTiles(r, prevName) {
 
 function renderFacts(r) {
   const facts = [
-    ['Top artist', r.top.artists[0] && `${esc(r.top.artists[0].name)} <span class="muted">${fmt(r.top.artists[0].plays)} plays</span>`],
+    ['Top artist', r.top.artists[0] && `${artistLink(r.top.artists[0].name)} <span class="muted">${fmt(r.top.artists[0].plays)} plays</span>`],
     ['Top album', r.top.albums[0] && `${esc(r.top.albums[0].name)} <span class="muted">${esc(r.top.albums[0].artist)}</span>`],
     ['Top track', r.top.tracks[0] && `${esc(r.top.tracks[0].name)} <span class="muted">${esc(r.top.tracks[0].artist)}</span>`],
     ['Busiest day', r.busiestDay?.count && `${esc(r.busiestDay.label)} <span class="muted">${fmt(r.busiestDay.count)} scrobbles</span>`],
@@ -106,9 +109,11 @@ function renderDays(r, person, prevName) {
 
 // ---------- Top lists and new music
 
+// Artist names open the artist page; for albums and tracks that's the artist line under the name.
 function listItem(item, value, extra = '') {
-  return `<li><div><div class="item-name">${esc(item.name)}${item.isNew ? ' <span class="badge">new</span>' : ''}</div>${
-    item.artist ? `<span class="item-sub">${esc(item.artist)}</span>` : ''}${extra}</div><span class="num">${value}</span></li>`;
+  const name = item.artist ? esc(item.name) : artistLink(item.name);
+  return `<li><div><div class="item-name">${name}${item.isNew ? ' <span class="badge">new</span>' : ''}</div>${
+    item.artist ? `<span class="item-sub">${artistLink(item.artist)}</span>` : ''}${extra}</div><span class="num">${value}</span></li>`;
 }
 
 function renderTop(r) {
@@ -149,7 +154,7 @@ function renderMonths(months, period, onOpenMonth) {
       <div class="inline-bar"><span style="width:${(m.scrobbles / max) * 100}%"></span><b>${fmt(m.scrobbles)}</b></div>
       <div class="num">${fmt(m.artists)}</div>
       <div class="num">${fmt(m.newArtists)}</div>
-      <div>${m.topArtist ? `${esc(m.topArtist.name)}<span class="item-sub">${fmt(m.topArtist.plays)} plays</span>` : '<span class="muted">—</span>'}</div>
+      <div>${m.topArtist ? `${artistLink(m.topArtist.name)}<span class="item-sub">${fmt(m.topArtist.plays)} plays</span>` : '<span class="muted">—</span>'}</div>
       <div id="month-genre-${i}" class="muted">…</div>
     </div>`;
   }).join('');
@@ -226,6 +231,7 @@ async function loadGenres(report, months, others, period) {
     : '<p class="muted">No tags found for these artists.</p>'}`;
   const topGenres = document.getElementById('rTopGenres');
   if (topGenres) topGenres.textContent = g.shares.slice(0, 3).map(s => s.name).join(', ') || '—';
+  if (shown?.report === report) shown.genres = g.shares.slice(0, 3).map(s => s.name);
 
   // month by month: the genres that lead across the 12 months, the rest as Other
   const perMonth = monthArtists.map(list => genreShares(list, tagsFor));

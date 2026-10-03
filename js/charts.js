@@ -81,20 +81,23 @@ function niceStep(rough) {
 
 // series: [{ name, slot, values }] where null means "not scrobbling yet" (no line drawn),
 // keys: bucket keys, labelFor(key, short) -> text
-export function lineChart(container, { keys, series, labelFor, isYearStart }) {
+// Options: format(value) for axis and tooltip numbers, showTotal (default true), max (fixed top of the axis).
+// A series can set `color` instead of a person `slot`.
+export function lineChart(container, { keys, series, labelFor, isYearStart, format = fmt, showTotal = true, max: fixedMax }) {
+  const stroke = s => s.color || color(s.slot);
   const width = container.clientWidth;
   const plotW = width - MARGIN.left - MARGIN.right;
   const plotH = HEIGHT - MARGIN.top - MARGIN.bottom;
-  const max = Math.max(1, ...series.flatMap(s => s.values));
+  const max = fixedMax ?? Math.max(1, ...series.flatMap(s => s.values).filter(v => v != null));
   const step = niceStep(max / 4);
   const top = Math.ceil(max / step) * step;
   const x = i => MARGIN.left + (keys.length === 1 ? plotW / 2 : (i / (keys.length - 1)) * plotW);
   const y = v => MARGIN.top + plotH - (v / top) * plotH;
 
   const grid = [];
-  for (let v = 0; v <= top; v += step) {
+  for (let v = 0; v <= top + step / 1000; v += step) {
     grid.push(`<line x1="${MARGIN.left}" x2="${width - MARGIN.right}" y1="${y(v)}" y2="${y(v)}"/>`);
-    grid.push(`<text x="${MARGIN.left - 8}" y="${y(v)}" text-anchor="end" dominant-baseline="middle">${fmt(v)}</text>`);
+    grid.push(`<text x="${MARGIN.left - 8}" y="${y(v)}" text-anchor="end" dominant-baseline="middle">${format(v)}</text>`);
   }
 
   // x labels: on long monthly charts, a year at each January (skipping years if they'd crowd);
@@ -117,7 +120,7 @@ export function lineChart(container, { keys, series, labelFor, isYearStart }) {
       d += `${pen}${x(i).toFixed(1)},${y(v).toFixed(1)}`;
       pen = 'L';
     });
-    return `<path class="series" d="${d}" stroke="${color(s.slot)}"/>`;
+    return `<path class="series" d="${d}" stroke="${stroke(s)}"/>`;
   }).join('');
 
   container.innerHTML = `
@@ -127,7 +130,7 @@ export function lineChart(container, { keys, series, labelFor, isYearStart }) {
       ${lines}
       <g class="hover" visibility="hidden">
         <line class="crosshair" y1="${MARGIN.top}" y2="${MARGIN.top + plotH}"/>
-        ${series.map(s => `<circle r="4.5" fill="${color(s.slot)}" stroke="var(--panel)" stroke-width="2"/>`).join('')}
+        ${series.map(s => `<circle r="4.5" fill="${stroke(s)}" stroke="var(--panel)" stroke-width="2"/>`).join('')}
       </g>
       <rect class="hit" x="${MARGIN.left - 6}" y="0" width="${plotW + 12}" height="${HEIGHT}" fill="transparent"/>
     </svg>
@@ -154,8 +157,8 @@ export function lineChart(container, { keys, series, labelFor, isYearStart }) {
 
     const total = series.reduce((sum, s) => sum + (s.values[i] ?? 0), 0);
     tooltip.innerHTML = `<b>${esc(labelFor(keys[i], false))}</b>${
-      series.map(s => `<div><span><span class="swatch" style="--color:${color(s.slot)}"></span>${esc(s.name)}</span><span>${s.values[i] == null ? '–' : fmt(s.values[i])}</span></div>`).join('')
-    }<div class="total"><span>Total</span><span>${fmt(total)}</span></div>`;
+      series.map(s => `<div><span><span class="swatch" style="--color:${stroke(s)}"></span>${esc(s.name)}</span><span>${s.values[i] == null ? '–' : format(s.values[i])}</span></div>`).join('')
+    }${showTotal ? `<div class="total"><span>Total</span><span>${format(total)}</span></div>` : ''}`;
     tooltip.hidden = false;
     const left = (x(i) / width) * box.width;
     const flip = left + tooltip.offsetWidth + 16 > box.width;
@@ -299,4 +302,80 @@ export function stackedShareChart(container, { labels, series, tooltip, height =
       <div class="tooltip" hidden></div>`;
     attachTooltip(container, container.querySelector('svg'), bands, tooltip);
   });
+}
+
+// ---------- Heatmaps (calendar and hour-by-weekday): one hue, darker = less, in five steps
+
+const HEAT_STEPS = [22, 40, 58, 78, 100];   // % of the person's colour mixed into the empty-cell colour
+
+// Thresholds from the non-zero counts' quantiles, so one huge day doesn't wash out the rest.
+function heatLevels(counts) {
+  const sorted = counts.filter(c => c > 0).sort((a, b) => a - b);
+  if (!sorted.length) return () => -1;
+  const cuts = [0.2, 0.4, 0.6, 0.8].map(q => sorted[Math.floor(q * (sorted.length - 1))]);
+  return count => count <= 0 ? -1 : cuts.filter(c => count > c).length;
+}
+const heatFill = (slot, level) => level < 0 ? 'var(--panel2)' : `color-mix(in oklab, var(--person-${slot}) ${HEAT_STEPS[level]}%, var(--panel2))`;
+
+export function heatLegend(slot) {
+  return `<span class="heat-legend">Less ${HEAT_STEPS.map((_, i) => `<i style="background:${heatFill(slot, i)}"></i>`).join('')} More</span>`;
+}
+
+// Shows the tooltip for any [data-tip] element under the pointer.
+function attachTips(container) {
+  const tooltip = container.querySelector('.tooltip');
+  container.addEventListener('pointerover', event => {
+    const cell = event.target.closest('[data-tip]');
+    if (!cell) { tooltip.hidden = true; return; }
+    tooltip.innerHTML = cell.dataset.tip;
+    tooltip.hidden = false;
+    const box = container.getBoundingClientRect(), r = cell.getBoundingClientRect();
+    const left = r.right - box.left + 6;
+    tooltip.style.left = `${left + tooltip.offsetWidth > box.width ? r.left - box.left - tooltip.offsetWidth - 6 : left}px`;
+    tooltip.style.top = `${Math.max(0, r.top - box.top - 8)}px`;
+  });
+  container.addEventListener('pointerleave', () => { tooltip.hidden = true; });
+}
+
+// days: Map 'YYYY-MM-DD' -> count. Weeks run Monday to Sunday, top to bottom.
+export function calendarHeatmap(container, { year, days, slot }) {
+  const CELL = 13, GAP = 3, LEFT = 30, TOP = 18;
+  const start = new Date(year, 0, 1);
+  const offset = (start.getDay() + 6) % 7;
+  const cells = [], months = [];
+  const counts = [];
+  for (const d = new Date(start); d.getFullYear() === year; d.setDate(d.getDate() + 1)) {
+    const index = offset + Math.round((d - start) / 86400000);
+    const key = `${year}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const count = days.get(key) || 0;
+    counts.push(count);
+    cells.push({ week: Math.floor(index / 7), weekday: index % 7, count, label: d.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' }) });
+    if (d.getDate() === 1) months.push({ week: Math.floor(index / 7), name: d.toLocaleDateString('en-US', { month: 'short' }) });
+  }
+  const level = heatLevels(counts);
+  const weeks = cells.at(-1).week + 1;
+  const width = LEFT + weeks * (CELL + GAP), height = TOP + 7 * (CELL + GAP);
+  container.innerHTML = `
+    <svg class="calendar-svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="Scrobbles per day in ${year}">
+      ${months.map(m => `<text x="${LEFT + m.week * (CELL + GAP)}" y="11">${m.name}</text>`).join('')}
+      ${['Mon', '', 'Wed', '', 'Fri', '', ''].map((d, i) => d ? `<text x="0" y="${TOP + i * (CELL + GAP) + CELL - 2}">${d}</text>` : '').join('')}
+      ${cells.map(c => `<rect x="${LEFT + c.week * (CELL + GAP)}" y="${TOP + c.weekday * (CELL + GAP)}" width="${CELL}" height="${CELL}" rx="3" fill="${heatFill(slot, level(c.count))}" data-tip="<b>${c.label}</b>${fmt(c.count)} scrobbles"/>`).join('')}
+    </svg>
+    <div class="tooltip" hidden></div>`;
+  attachTips(container);
+}
+
+// grid: 7 x 24 counts, Monday first.
+export function weekHourHeatmap(container, { grid, slot }) {
+  const DAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  const hour = h => `${h % 12 || 12}${h < 12 ? 'am' : 'pm'}`;
+  const level = heatLevels(grid.flat());
+  container.innerHTML = `
+    <div class="week-hour">
+      <span></span>${Array.from({ length: 24 }, (_, h) => `<span class="wh-hour">${h % 3 ? '' : hour(h)}</span>`).join('')}
+      ${grid.map((row, d) => `<span class="wh-day">${DAYS[d]}</span>${row.map((count, h) =>
+        `<i style="background:${heatFill(slot, level(count))}" data-tip="<b>${DAYS[d]} ${hour(h)}–${hour((h + 1) % 24)}</b>${fmt(count)} scrobbles"></i>`).join('')}`).join('')}
+    </div>
+    <div class="tooltip" hidden></div>`;
+  attachTips(container);
 }
