@@ -14,7 +14,7 @@ export class LastfmError extends Error {
   constructor(message, code) { super(message); this.code = code; }
 }
 
-// --- request queue: at most MAX_CONCURRENT_REQUESTS at once, starts spaced MIN_REQUEST_GAP_MS apart
+// ---------- Request queue: at most MAX_CONCURRENT_REQUESTS at once, starts spaced MIN_REQUEST_GAP_MS apart
 
 const waiting = [];
 let running = 0;
@@ -31,7 +31,9 @@ function pump() {
 const acquire = () => new Promise(resolve => { waiting.push(resolve); pump(); });
 const release = () => { running--; pump(); };
 
-// --- calls
+// ---------- Calls
+
+// Retries temporary failures (backing off, longer after a rate limit); other errors are thrown as LastfmError.
 
 export async function call(method, params = {}, signal) {
   const query = new URLSearchParams({ method, ...params });

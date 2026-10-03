@@ -41,28 +41,34 @@ A report for a period still under way is compared with the previous period up to
 
 | File | Job |
 | --- | --- |
-| `index.html` | Page markup |
+| `index.html` | Page markup: intro, Compare tab, Reports tab, artist page |
 | `css/style.css` | All styles, colours at the top (`--person-0` … `--person-5` are the six people's colours) |
-| `js/config.js` | Tunables: rate limit, page size, rows before lists scroll |
-| `js/util.js` | Shared helpers: escaping, number and date formats, `fitRows` for scroll boxes |
+| `data/genre-tags.js` | Tags that aren't genres, and genre spellings to merge |
+| **Data** | |
+| `js/config.js` | Tunables: rate limit, page size, rows before lists scroll, list and chart sizes |
 | `js/api.js` | Calls the proxy through one shared queue (about 4.5 requests a second), retries temporary errors and rate limits |
-| `js/store.js` | IndexedDB: saved histories and artist tags |
-| `js/history.js` | Profile lookup, full/incremental history download with resume, artist tags |
-| `js/analyze.js` | The comparison maths (no DOM): per-period play counts, shared/unique, overlap, timeline buckets |
-| `js/report.js` | The report maths (no DOM): weeks/months/years, first plays, new music, clock, fingerprint, month rows |
-| `js/genres.js` | Genre shares and variety from artist tags (no DOM) |
-| `js/genre-loader.js` | Loads artist tags (IndexedDB, then Last.fm) and keeps them in memory |
-| `js/report-view.js` | HTML and charts for the Reports tab |
-| `js/pair.js` | Maths for the side-by-side charts (no DOM): leans, rank lists, who was first, clocks, monthly ranks |
-| `js/compare-charts.js` | HTML and charts for Side by side, Who played it first and When you listen |
-| `js/artist.js` | One artist's history for one person, and the CSV export (no DOM) |
+| `js/store.js` | IndexedDB: saved histories, an index of who's saved, artist tags |
+| `js/history.js` | Profile lookup, full/incremental history download with resume, artist tags, the saved-people list |
+| `js/genre-loader.js` | Loads artist tags (IndexedDB, then Last.fm) once and keeps them in memory |
+| `js/summaries.js` | Each person's summaries (per period, per year, all time, first plays), worked out once and cached |
+| **Maths (no DOM, tested in Node)** | |
+| `js/analyze.js` | Per-period play counts, shared/unique items, overlap, timeline buckets |
+| `js/report.js` | Weeks/months/years, first plays, new music, listening clock, fingerprint, month rows |
+| `js/pair.js` | Leans, top lists side by side, who played it first, clocks, monthly ranks |
+| `js/genres.js` | Genre shares and variety from artist tags |
+| `js/artist.js` | One artist's history for one person, and the CSV export |
+| **Drawing** | |
+| `js/util.js` | Escaping, number and date formats, list rows, `fitRows` for scroll boxes, file downloads |
+| `js/charts.js` | SVG Venn diagram, "shared by how many" bars, line, column, stacked-share, slope and bump charts, all with hover tooltips |
+| `js/people.js` | The people cards and the saved-in-this-browser list |
+| `js/compare-view.js` | Compare tab tables and lists: head to head, overlap, genres, shared items, only one of you |
+| `js/compare-charts.js` | Compare tab charts: listening over time, compatibility over time, side by side, who played it first, when you listen |
+| `js/report-view.js` | The Reports tab |
 | `js/artist-view.js` | The artist page |
 | `js/share-card.js` | Draws a report as a PNG image |
-| `data/genre-tags.js` | Tags that aren't genres, and genre spellings to merge |
-| `js/charts.js` | SVG Venn diagram, "shared by how many" bars, line, column, stacked-share, slope and bump charts, all with hover tooltips |
-| `js/render.js` | HTML for the people cards, stats table, overlap, shared table and unique lists |
 | `js/snap.js` | Gentle snapping onto section headers after the user scrolls |
-| `js/app.js` | State, events, URL state, and the order things run in |
+| `js/app.js` | State, URL, events, and the order things are drawn in |
+| **Elsewhere** | |
 | `functions/api/lastfm.js` | The Last.fm proxy (Cloudflare Pages Function) |
 | `dev/mock-server.js` | Local preview with made-up data, no key needed |
 | `tests/` | Tests for the maths files |

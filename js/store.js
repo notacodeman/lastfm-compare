@@ -4,7 +4,7 @@
 const DB_NAME = 'scrobble-compare';
 const DB_VERSION = 2;
 export const HISTORY = 'history';   // { key: username lowercased, rows, watermark, pending? }
-export const TAGS = 'tags';         // { key: artist name lowercased, tags: [names] }
+export const TAGS = 'tags';         // { key: artist name lowercased, tags: [{ name, count }] }
 export const PEOPLE = 'people';     // { key, name, scrobbles, updated }: a small index of saved histories (added in v2)
 const STORES = [HISTORY, TAGS, PEOPLE];
 
@@ -33,7 +33,6 @@ function run(storeName, mode, action) {
 
 export const load = (storeName, key) => run(storeName, 'readonly', s => s.get(key));
 export const save = (storeName, value) => run(storeName, 'readwrite', s => s.put(value));
-export const remove = (storeName, key) => run(storeName, 'readwrite', s => s.delete(key));
 export const clearAll = () => Promise.all(STORES.map(name => run(name, 'readwrite', s => s.clear())));
 export const loadAll = storeName => run(storeName, 'readonly', s => s.getAll());
 export const keys = storeName => run(storeName, 'readonly', s => s.getAllKeys());

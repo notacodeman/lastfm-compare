@@ -12,9 +12,8 @@ export const PAGE_SIZE = 200;               // the most user.getRecentTracks ret
 export const SAVE_EVERY_PAGES = 20;         // checkpoint a download so a closed tab can resume
 
 export const TABLE_ROWS = 15;               // shared table rows before it scrolls
-export const PANEL_ROWS = 10;               // side-by-side "only one of you" lists
+export const PANEL_ROWS = 10;               // lists in panels (only one of you, top lists, leans…)
 export const MAX_RENDERED_ROWS = 500;       // search to reach the rest
-export const TAG_ARTISTS = 10;              // top artists per person used to guess their top tags
 export const DAILY_CHART_UP_TO_DAYS = 120;  // longer periods are charted by month
 
 export const SNAP_DISTANCE_PX = 80;         // section headers this close to the top get snapped to

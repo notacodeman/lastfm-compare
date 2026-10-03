@@ -16,13 +16,7 @@ export async function fetchProfile(username, signal) {
   try {
     const { user } = await call('user.getinfo', { user: username }, signal);
     const image = (user.image || []).find(i => i.size === 'large')?.['#text'] || '';
-    return {
-      name: user.name,
-      url: user.url,
-      image,
-      registered: +user.registered?.unixtime || null,
-      playcount: +user.playcount || 0,
-    };
+    return { name: user.name, url: user.url, image };
   } catch (err) {
     if (err.code === 6) throw new LastfmError(`There's no Last.fm user called "${username}".`, 6);
     throw err;
@@ -33,7 +27,8 @@ export async function fetchProfile(username, signal) {
 export async function fetchHistory(username, { signal, onProgress = () => {} } = {}) {
   const key = username.toLowerCase();
   const record = (await load(HISTORY, key)) || { key, rows: [], watermark: 0 };
-  const report = (done, total, extra) => onProgress({ pagesDone: done, totalPages: total, scrobbles: record.rows.length + extra });
+  // newRows: scrobbles downloaded so far in the current job, on top of the saved ones
+  const report = (pagesDone, totalPages, newRows) => onProgress({ pagesDone, totalPages, scrobbles: record.rows.length + newRows });
   report(0, 0, 0);
 
   // Finish an interrupted download first, then fetch anything newer.
@@ -58,8 +53,10 @@ async function finishPending(username, record, signal, report) {
   };
 
   let sinceSave = 0;
-  const countRows = () => Object.values(job.pages).reduce((n, rows) => n + rows.length, 0);
-  const progress = () => report(Object.keys(job.pages).length, job.totalPages || 0, countRows());
+  const progress = () => {
+    const pages = Object.values(job.pages);
+    report(pages.length, job.totalPages || 0, pages.reduce((n, rows) => n + rows.length, 0));
+  };
 
   if (job.totalPages == null) {
     const first = await fetchPage(1);
@@ -123,8 +120,9 @@ export async function artistTags(artist, signal) {
 // Everyone with a history saved in this browser, newest first. Histories saved before the PEOPLE index
 // existed only have their lowercased key, so they're listed by that.
 export async function savedPeople() {
-  const [index, all] = await Promise.all([loadAll(PEOPLE), keys(HISTORY)]);
-  const known = new Map((index || []).map(p => [p.key, p]));
-  for (const key of all || []) if (!known.has(key)) known.set(key, { key, name: key, scrobbles: null, updated: 0 });
-  return [...known.values()].filter(p => (all || []).includes(p.key)).sort((a, b) => b.updated - a.updated || a.name.localeCompare(b.name));
+  const [index = [], saved = []] = await Promise.all([loadAll(PEOPLE), keys(HISTORY)]);
+  const named = new Map(index.map(p => [p.key, p]));
+  return saved
+    .map(key => named.get(key) || { key, name: key, scrobbles: null, updated: 0 })
+    .sort((a, b) => b.updated - a.updated || a.name.localeCompare(b.name));
 }

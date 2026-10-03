@@ -1,17 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { streaks, dailyCounts, artistDetail, artistRank, toCsv } from '../js/artist.js';
+import { longestStreak, artistDetail, artistRank, toCsv } from '../js/artist.js';
 import { summarize } from '../js/analyze.js';
 
 const at = (y, m, d, h = 12) => new Date(y, m - 1, d, h) / 1000;
 const row = (time, artist, track = 't', album = '') => [time, artist, track, album];
 
 test('longest run of days, across a month end', () => {
-  const rows = [row(at(2026, 1, 1), 'A'), row(at(2026, 1, 3), 'A'), row(at(2026, 2, 28), 'A'), row(at(2026, 3, 1), 'A'), row(at(2026, 3, 2), 'A')];
-  const s = streaks(dailyCounts(rows), at(2026, 3, 3));
-  assert.equal(s.longest.length, 3);
-  assert.equal(s.longest.start, '2026-02-28');
-  assert.equal(s.current.length, 3);
+  assert.equal(longestStreak(['2026-01-01', '2026-01-03', '2026-02-28', '2026-03-01', '2026-03-02']), 3);
+  assert.equal(longestStreak([]), 0);
 });
 
 test('artist detail and rank', () => {
@@ -21,6 +18,7 @@ test('artist detail and rank', () => {
   assert.equal(d.tracks[0].name, 'one');
   assert.equal(d.albums[0].plays, 3);
   assert.deepEqual(d.biggestDay, { key: '2024-05-01', count: 2 });
+  assert.equal(d.longestStreak, 1);
   assert.equal(d.peakMonth.key, '2024-05');
   assert.equal(artistDetail(rows, 'nobody'), null);
   const all = summarize(rows, { from: -Infinity, to: Infinity });
