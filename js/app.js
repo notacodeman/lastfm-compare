@@ -11,6 +11,7 @@ import { UNITS, periodFromKey, reportPeriod, shiftPeriod, periodLabel, rowsBetwe
 import { renderReport, periodOptions, currentReport as shownReport } from './report-view.js';
 import { renderArtist } from './artist-view.js';
 import { toCsv } from './artist.js';
+import { renderPair, renderFirsts, renderClocks } from './compare-charts.js';
 import { saveReportImage } from './share-card.js';
 import { genreShares, topArtists } from './genres.js';
 import { loadTags, tagsFor } from './genre-loader.js';
@@ -31,6 +32,9 @@ const state = {
   report: { person: null, unit: 'month', key: null },   // key null = the current period
   compatWith: null,   // whose compatibility over time to show (3+ people)
   artist: null,       // artist page
+  pairA: null,        // the two people in "Side by side" (3+ people)
+  pairB: null,
+  timelineMode: 'month',   // or 'total' (running total)
   returnView: 'compare',
 };
 const VIEWS = ['compare', 'report', 'artist'];
@@ -226,7 +230,28 @@ function update() {
   renderLegend(people);
   drawTimeline();
   drawCompatibility(people);
+  drawPair();
+  renderFirsts({ people, allTime: people.map(allTimeSummary), kind: state.kind, minPlays: state.minPlays });
+  renderClocks({ people, range });
   loadCompareGenres(people, summaries);
+}
+
+function allTimeSummary(person) {
+  if (!person.summaries.has('all')) person.summaries.set('all', summarize(person.rows, { from: -Infinity, to: Infinity }));
+  return person.summaries.get('all');
+}
+
+// Side by side: two people at a time, picked when there are 3+.
+function drawPair() {
+  if (!view) return;
+  const { people, summaries } = view;
+  const a = people.find(p => p.key === state.pairA) || people[0];
+  const b = people.find(p => p.key === state.pairB && p !== a) || people.find(p => p !== a);
+  $('#pairTools').hidden = people.length < 3;
+  const options = selected => people.map(p => `<option value="${p.key}" ${p === selected ? 'selected' : ''}>${esc(p.profile.name)}</option>`).join('');
+  $('#pairA').innerHTML = options(a);
+  $('#pairB').innerHTML = options(b);
+  renderPair({ a, b, sa: summaries[people.indexOf(a)], sb: summaries[people.indexOf(b)], kind: state.kind, onArtist: openArtist });
 }
 
 // Listening in common for each calendar year (same measure as the Overlap section, all years).
@@ -306,8 +331,14 @@ function drawTimeline() {
   const series = people.map(p => {
     const counts = countByBucket(p.rows, range, unit);
     const started = p.rows.length ? bucketKey(p.rows[0][0], unit) : '';
-    return { name: p.profile.name, slot: p.slot, values: keys.map(k => k < started ? null : counts.get(k) || 0) };
+    const values = keys.map(k => k < started ? null : counts.get(k) || 0);
+    if (state.timelineMode === 'total') {   // running total within the period
+      let sum = 0;
+      values.forEach((v, i) => { if (v != null) values[i] = sum += v; });
+    }
+    return { name: p.profile.name, slot: p.slot, values };
   });
+  document.querySelectorAll('#timelineMode button').forEach(b => b.setAttribute('aria-pressed', b.dataset.mode === state.timelineMode));
   const labelFor = (key, short) => {
     const [y, m, d] = key.split('-').map(Number);
     const date = new Date(y, m - 1, d || 1);
@@ -388,7 +419,7 @@ function renderReportView() {
   $('#reportPeriodPicker').innerHTML = options.map(o => `<option value="${o.key}" ${o.key === period.key ? 'selected' : ''}>${periodLabel(o)}</option>`).join('');
   $('#periodNext').disabled = period.end / 1000 > now;
   $('#periodPrev').disabled = !person.rows.length || period.from <= person.rows[0][0];
-  renderReport({ people, person, period, now, onOpenMonth: key => openReport({ unit: 'month', key }) });
+  renderReport({ people, person, period, now, onOpenMonth: key => openReport({ unit: 'month', key }), onArtist: openArtist });
 }
 
 function openReport(changes) {
@@ -452,6 +483,22 @@ $('#saveImage').addEventListener('click', async event => {
   }
 });
 $('#compatPerson').addEventListener('change', event => { state.compatWith = event.target.value; drawCompatibility(ready()); });
+$('#pairA').addEventListener('change', event => {
+  state.pairA = event.target.value;
+  if (state.pairB === state.pairA) state.pairB = null;
+  drawPair();
+});
+$('#pairB').addEventListener('change', event => {
+  state.pairB = event.target.value;
+  if (state.pairA === state.pairB) state.pairA = null;
+  drawPair();
+});
+$('#timelineMode').addEventListener('click', event => {
+  const mode = event.target.closest('[data-mode]')?.dataset.mode;
+  if (!mode || mode === state.timelineMode) return;
+  state.timelineMode = mode;
+  drawTimeline();
+});
 $('#artistBack').addEventListener('click', () => setView(state.returnView));
 // Artist names anywhere on the page open the artist page.
 document.addEventListener('click', event => {

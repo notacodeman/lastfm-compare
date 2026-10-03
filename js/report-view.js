@@ -1,11 +1,12 @@
 // The Reports tab: one person's week, month or year, compared with the period before.
 
 import { $, esc, fmt, fmtDate, fitRows, artistLink } from './util.js';
-import { PANEL_ROWS, GENRE_ARTISTS, GENRE_ARTISTS_PER_MONTH, GENRES_SHOWN, GENRES_STACKED } from './config.js';
+import { PANEL_ROWS, GENRE_ARTISTS, GENRE_ARTISTS_PER_MONTH, GENRES_SHOWN, GENRES_STACKED, BUMP_ARTISTS, BUMP_DEPTH } from './config.js';
+import { monthlyRanks } from './pair.js';
 import { buildReport, monthsAround, monthRow, periodLabel, shiftPeriod, reportPeriod, firstPlays } from './report.js';
 import { genreShares, genreVariety, topArtists } from './genres.js';
 import { loadTags, tagsFor } from './genre-loader.js';
-import { columnChart, stackedShareChart } from './charts.js';
+import { columnChart, stackedShareChart, bumpChart } from './charts.js';
 
 const color = slot => `var(--person-${slot})`;
 const swatch = slot => `<span class="swatch" style="--color:${color(slot)}"></span>`;
@@ -27,7 +28,7 @@ export function firstPlaysFor(person) {
 }
 
 // people: everyone ready; person: whose report; period: from report.js; now: unix seconds
-export function renderReport({ people, person, period, now, onOpenMonth }) {
+export function renderReport({ people, person, period, now, onOpenMonth, onArtist }) {
   const report = buildReport(person.rows, period, firstPlaysFor(person), now);
   shown = { report, person, genres: [] };
   const ongoing = period.end / 1000 > now;
@@ -41,6 +42,7 @@ export function renderReport({ people, person, period, now, onOpenMonth }) {
   renderNew(report);
   const months = monthsAround(period).map(month => monthRow(person.rows, month, firstPlaysFor(person)));
   renderMonths(months, period, onOpenMonth);
+  renderBump(person, months.map(m => m.month), onArtist);
   renderClock(report, person);
   const others = people.map(p => ({ person: p, report: p === person ? report : buildReport(p.rows, period, firstPlaysFor(p), now) }));
   renderFingerprint(others, null);
@@ -163,6 +165,19 @@ function renderMonths(months, period, onOpenMonth) {
     const open = () => onOpenMonth(row.dataset.month);
     row.addEventListener('click', open);
     row.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); open(); } });
+  });
+}
+
+// ---------- Top artists month by month
+
+function renderBump(person, months, onArtist) {
+  const series = monthlyRanks(person.rows, months, BUMP_ARTISTS, BUMP_DEPTH);
+  if (!series.length) { $('#rBumpChart').innerHTML = '<p class="muted">No scrobbles in these months.</p>'; return; }
+  bumpChart($('#rBumpChart'), {
+    series, depth: BUMP_DEPTH, slot: person.slot,
+    labels: months.map(m => m.start.toLocaleDateString('en-US', { month: 'short' })),
+    longLabels: months.map(m => m.start.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })),
+    onPick: s => onArtist(s.name),
   });
 }
 

@@ -291,3 +291,159 @@ export function stackedShareChart(container, { labels, series, tooltip, height =
     attachTooltip(container, container.querySelector('svg'), bands, tooltip);
   });
 }
+
+// ---------- Taste scatter: one dot per shared item, a's plays across, b's plays up, both on log scales
+
+const hashJitter = key => { let h = 0; for (const c of key) h = (h * 31 + c.charCodeAt(0)) | 0; return ((h % 1000) / 1000) * 0.08 - 0.04; };
+
+// points: from pair.js tastePoints; ratio: b's scrobbles / a's scrobbles (the "same share" line)
+export function scatterChart(container, { points, a, b, ratio, noun, onPick }) {
+  drawResponsive(container, () => {
+    const width = container.clientWidth;
+    const size = Math.min(width, 520);
+    const m = { top: 14, right: 16, bottom: 40, left: 52 };
+    const plotW = width - m.left - m.right, plotH = size - m.top - m.bottom;
+    const max = Math.max(10, ...points.flatMap(p => [p.x, p.y]));
+    const top = Math.log10(max * 1.3);
+    const LOW = Math.log10(0.6);   // a little room below 1 play, so those dots sit clear of the axes
+    const sx = v => m.left + ((Math.log10(v) - LOW) / (top - LOW)) * plotW;
+    const sy = v => m.top + plotH - ((Math.log10(v) - LOW) / (top - LOW)) * plotH;
+    const ticks = [1, 10, 100, 1000, 10000, 100000].filter(t => Math.log10(t) <= top);
+    const grid = ticks.map(t => `<line x1="${sx(t)}" x2="${sx(t)}" y1="${m.top}" y2="${m.top + plotH}"/><line x1="${m.left}" x2="${m.left + plotW}" y1="${sy(t)}" y2="${sy(t)}"/>
+      <text x="${sx(t)}" y="${m.top + plotH + 16}" text-anchor="middle">${fmtTick(t)}</text><text x="${m.left - 8}" y="${sy(t)}" text-anchor="end" dominant-baseline="middle">${fmtTick(t)}</text>`).join('');
+    // "same share" line: y = x * ratio, clipped to the plot
+    const edge = 10 ** top;
+    const low = 10 ** LOW;
+    const x1 = Math.max(low, low / ratio), x2 = Math.min(edge, edge / ratio);
+    const dots = points.map((p, i) => {
+      const jx = 10 ** hashJitter(p.key), jy = 10 ** hashJitter(p.key + '~');
+      const slot = p.lean > 0 ? b.slot : a.slot;
+      return `<circle class="dot" data-i="${i}" cx="${sx(p.x * jx).toFixed(1)}" cy="${sy(p.y * jy).toFixed(1)}" r="4.5" fill="var(--person-${slot})"/>`;
+    }).join('');
+    container.innerHTML = `
+      <svg viewBox="0 0 ${width} ${size}" height="${size}" role="img" aria-label="Plays of each shared ${noun}: ${esc(a.profile.name)} across, ${esc(b.profile.name)} up">
+        <g class="grid axis">${grid}</g>
+        <line class="same-share" x1="${sx(x1)}" y1="${sy(x1 * ratio)}" x2="${sx(x2)}" y2="${sy(x2 * ratio)}"/>
+        <text class="corner" x="${m.left + 8}" y="${m.top + 14}">more ${esc(b.profile.name)}</text>
+        <text class="corner" x="${m.left + plotW - 8}" y="${m.top + plotH - 8}" text-anchor="end">more ${esc(a.profile.name)}</text>
+        <g class="dots">${dots}</g>
+        <text class="axis-title" x="${m.left + plotW / 2}" y="${size - 4}" text-anchor="middle">${esc(a.profile.name)}'s plays →</text>
+        <text class="axis-title" transform="translate(12 ${m.top + plotH / 2}) rotate(-90)" text-anchor="middle">${esc(b.profile.name)}'s plays →</text>
+      </svg>
+      <div class="tooltip" hidden></div>`;
+    const tooltip = container.querySelector('.tooltip');
+    const svg = container.querySelector('svg');
+    svg.querySelectorAll('.dot').forEach(dot => {
+      const p = points[+dot.dataset.i];
+      dot.addEventListener('pointerenter', () => {
+        const times = Math.exp(Math.abs(p.lean));
+        const who = p.lean > 0 ? b : a;
+        tooltip.innerHTML = `<b>${esc(p.name)}</b>${p.artist ? `<div class="muted">${esc(p.artist)}</div>` : ''}
+          <div><span>${esc(a.profile.name)}</span><span>${fmt(p.x)}</span></div><div><span>${esc(b.profile.name)}</span><span>${fmt(p.y)}</span></div>
+          <div class="total"><span>${times < 1.1 ? 'About the same share' : `${times.toFixed(1)}× bigger share for ${esc(who.profile.name)}`}</span><span></span></div>`;
+        tooltip.hidden = false;
+        const box = svg.getBoundingClientRect(), r = dot.getBoundingClientRect();
+        const left = r.right - box.left + 8;
+        tooltip.style.left = `${left + tooltip.offsetWidth > box.width ? r.left - box.left - tooltip.offsetWidth - 8 : left}px`;
+        tooltip.style.top = `${Math.max(0, r.top - box.top - 10)}px`;
+      });
+      dot.addEventListener('click', () => onPick?.(p));
+    });
+    svg.addEventListener('pointerleave', () => { tooltip.hidden = true; });
+  });
+}
+
+// ---------- Rank comparison: a's top items on the left, b's on the right, lines joining items on both lists
+
+export function slopeChart(container, { left, right, a, b, onPick }) {
+  drawResponsive(container, () => {
+    const width = container.clientWidth;
+    const ROW = 24, TOP = 30;
+    const rows = Math.max(left.length, right.length);
+    const height = TOP + rows * ROW + 6;
+    const col = Math.min(250, Math.max(130, width * 0.36));
+    const chars = Math.floor((col - 34) / 7.2);
+    const clip = s => s.length > chars ? `${s.slice(0, chars - 1)}…` : s;
+    const y = i => TOP + i * ROW + ROW / 2;
+    const rightIndex = new Map(right.map((item, i) => [item.key, i]));
+    const lines = left.map((item, i) => rightIndex.has(item.key)
+      ? `<line class="link" data-key="${esc(item.key)}" x1="${col + 6}" y1="${y(i)}" x2="${width - col - 6}" y2="${y(rightIndex.get(item.key))}"/>` : '').join('');
+    const leftKeys = new Set(left.map(item => item.key));
+    const label = (item, i, side) => {
+      // not on the other list: show where it ranks for the other person instead of a line
+      const onOther = side === 'left' ? rightIndex.has(item.key) : leftKeys.has(item.key);
+      const extra = onOther ? '' : ` <tspan class="off">${item.otherRank ? `#${item.otherRank}` : '–'}</tspan>`;
+      const x = side === 'left' ? col : width - col;
+      const anchor = side === 'left' ? 'end' : 'start';
+      const rank = side === 'left' ? `<text class="rank" x="4" y="${y(i)}">${item.rank}</text>` : `<text class="rank" x="${width - 4}" y="${y(i)}" text-anchor="end">${item.rank}</text>`;
+      return `${rank}<text class="item" data-key="${esc(item.key)}" x="${x}" y="${y(i)}" text-anchor="${anchor}">${esc(clip(item.name))}${extra}<title>${esc(item.name)}${item.artist ? ` – ${esc(item.artist)}` : ''}: #${item.rank} for ${esc((side === 'left' ? a : b).profile.name)}, ${item.otherRank ? `#${item.otherRank}` : 'not played'} for ${esc((side === 'left' ? b : a).profile.name)}</title></text>`;
+    };
+    container.innerHTML = `
+      <svg class="slope" viewBox="0 0 ${width} ${height}" height="${height}" role="img" aria-label="Top lists side by side">
+        <text class="head" x="${col}" y="14" text-anchor="end" fill="var(--person-${a.slot})">${esc(a.profile.name)}</text>
+        <text class="head" x="${width - col}" y="14" fill="var(--person-${b.slot})">${esc(b.profile.name)}</text>
+        <g>${lines}</g>
+        ${left.map((item, i) => label(item, i, 'left')).join('')}
+        ${right.map((item, i) => label(item, i, 'right')).join('')}
+      </svg>`;
+    const svg = container.querySelector('svg');
+    const all = [...left, ...right];
+    const highlight = key => svg.querySelectorAll('[data-key]').forEach(el => el.classList.toggle('lit', !!key && el.dataset.key === key));
+    svg.addEventListener('pointerover', e => highlight(e.target.closest('[data-key]')?.dataset.key));
+    svg.addEventListener('pointerleave', () => highlight(null));
+    svg.addEventListener('click', e => {
+      const key = e.target.closest('.item')?.dataset.key;
+      const item = key && all.find(i => i.key === key);
+      if (item) onPick?.(item);
+    });
+  });
+}
+
+// ---------- Bump chart: rank of the top artists in each month; hover one to follow it
+
+export function bumpChart(container, { series, labels, longLabels, depth, slot, onPick }) {
+  drawResponsive(container, () => {
+    const width = container.clientWidth;
+    const m = { top: 14, right: Math.min(170, width * 0.32), bottom: 26, left: 34 };
+    const ROW = 26;
+    const height = m.top + depth * ROW + m.bottom;
+    const plotW = width - m.left - m.right;
+    const x = i => m.left + (labels.length === 1 ? plotW / 2 : (i / (labels.length - 1)) * plotW);
+    const y = r => m.top + (r - 0.5) * ROW;
+    const chars = Math.floor((m.right - 14) / 7);
+    const clip = s => s.length > chars ? `${s.slice(0, chars - 1)}…` : s;
+    const grid = Array.from({ length: depth }, (_, r) => `<text x="${m.left - 12}" y="${y(r + 1)}" text-anchor="end" dominant-baseline="middle">${r + 1}</text>`).join('');
+    const xLabels = labels.map((l, i) => `<text x="${x(i)}" y="${height - 8}" text-anchor="middle">${esc(l)}</text>`).join('');
+    const groups = series.map((s, n) => {
+      let d = '', pen = 'M';
+      s.ranks.forEach((r, i) => { if (r == null) { pen = 'M'; return; } d += `${pen}${x(i).toFixed(1)},${y(r).toFixed(1)}`; pen = 'L'; });
+      const dots = s.ranks.map((r, i) => r == null ? '' : `<circle cx="${x(i)}" cy="${y(r)}" r="4" data-tip="<b>${esc(s.name)}</b>${esc(longLabels[i])}: #${r}"/>`).join('');
+      const lastIndex = s.ranks.findLastIndex(r => r != null);
+      const label = lastIndex === labels.length - 1
+        ? `<text class="end-label" x="${x(lastIndex) + 10}" y="${y(s.ranks[lastIndex])}" dominant-baseline="middle">${esc(clip(s.name))}</text>` : '';
+      return `<g class="bump" data-n="${n}">${d ? `<path d="${d}"/>` : ''}${dots}${label}</g>`;
+    }).join('');
+    container.innerHTML = `
+      <svg class="bump-chart" viewBox="0 0 ${width} ${height}" height="${height}" style="--hi:var(--person-${slot})" role="img" aria-label="Rank of top artists each month">
+        <g class="axis">${grid}${xLabels}</g>${groups}
+      </svg>
+      <div class="tooltip" hidden></div>`;
+    const svg = container.querySelector('svg');
+    const tooltip = container.querySelector('.tooltip');
+    const highlight = n => svg.querySelectorAll('.bump').forEach(g => g.classList.toggle('lit', g.dataset.n === n));
+    svg.addEventListener('pointerover', e => {
+      const g = e.target.closest('.bump');
+      highlight(g?.dataset.n);
+      const dot = e.target.closest('[data-tip]');
+      if (!dot) { tooltip.hidden = true; return; }
+      tooltip.innerHTML = dot.dataset.tip;
+      tooltip.hidden = false;
+      const box = svg.getBoundingClientRect(), r = dot.getBoundingClientRect();
+      const left = r.right - box.left + 8;
+      tooltip.style.left = `${left + tooltip.offsetWidth > box.width ? r.left - box.left - tooltip.offsetWidth - 8 : left}px`;
+      tooltip.style.top = `${Math.max(0, r.top - box.top - 10)}px`;
+    });
+    svg.addEventListener('pointerleave', () => { highlight(null); tooltip.hidden = true; });
+    svg.addEventListener('click', e => { const g = e.target.closest('.bump'); if (g) onPick?.(series[+g.dataset.n]); });
+  });
+}

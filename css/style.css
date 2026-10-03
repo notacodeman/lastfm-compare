@@ -412,6 +412,56 @@ select { padding-right: 28px; }
 
 
 
+/* ---------- Side by side, who was first, butterfly, bump ---------- */
+
+.pair-grid { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+@media (max-width: 900px) { .pair-grid { grid-template-columns: minmax(0, 1fr); } }
+.lean-lists { display: grid; gap: 12px; }
+.slope-panel { margin-top: 12px; }
+.vs { align-self: center; }
+.chart .same-share { stroke: var(--muted); stroke-width: 1.5; stroke-dasharray: 5 4; }
+.chart .corner { fill: var(--dim); font-size: 12px; }
+.chart .axis-title { fill: var(--muted); font-size: 12px; }
+.chart .dot { stroke: var(--panel); stroke-width: 1; fill-opacity: .8; cursor: pointer; }
+.chart .dot:hover { fill-opacity: 1; stroke: var(--ink); }
+
+.slope text { font-size: 13px; dominant-baseline: middle; fill: var(--text); }
+.slope .head { font-weight: 700; font-size: 14px; dominant-baseline: auto; }
+.slope .rank { fill: var(--dim); font-size: 12px; }
+.slope .item { cursor: pointer; }
+.slope .off { fill: var(--dim); font-size: 11px; }
+.slope .link { stroke: var(--dim); stroke-width: 1.5; }
+.slope .lit { fill: var(--ink); font-weight: 700; }
+.slope .link.lit { stroke: var(--accent); stroke-width: 2.5; }
+
+#firstsList li { grid-template-columns: minmax(0, 1fr) 6.5em; }
+.firsts-bars .bar-row { grid-template-columns: 9em minmax(0, 1fr) 4em; }
+.firsts-bars .bar-row > span:first-child { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.butterfly { display: grid; gap: 6px; }
+.fly-row { display: grid; grid-template-columns: minmax(0, 1fr) 8.5em minmax(0, 1fr); gap: 10px; align-items: center; font-size: .9rem; }
+.fly-head { font-weight: 600; color: var(--ink); margin-bottom: 4px; }
+.fly-name { text-align: center; color: var(--ink); overflow-wrap: anywhere; }
+.fly-side { display: grid; grid-template-columns: 3em minmax(0, 1fr); gap: 8px; align-items: center; }
+.fly-side.left { grid-template-columns: 3em minmax(0, 1fr); }
+.fly-side.right { grid-template-columns: minmax(0, 1fr) 3em; }
+.fly-side.right .value { order: 2; text-align: right; }
+.fly-side.left .bar { transform: scaleX(-1); }
+.fly-head .fly-side.left { display: block; text-align: right; }
+.fly-head .fly-side.right { display: block; }
+.fly-side .bar { height: 12px; background: var(--panel2); border-radius: 0 4px 4px 0; }
+.fly-side .bar span { display: block; height: 100%; border-radius: 0 4px 4px 0; }
+.fly-side .value { color: var(--ink); }
+
+.bump-chart path { fill: none; stroke: var(--dim); stroke-width: 2; stroke-linejoin: round; }
+.bump-chart circle { fill: var(--dim); stroke: var(--panel); stroke-width: 2; }
+.bump-chart .end-label { fill: var(--muted); font-size: 12px; }
+.bump-chart .bump { cursor: pointer; }
+.bump-chart .bump.lit path { stroke: var(--hi); stroke-width: 3.5; }
+.bump-chart .bump.lit circle { fill: var(--hi); }
+.bump-chart .bump.lit .end-label { fill: var(--ink); font-weight: 700; }
+#rBumpChart { min-width: 520px; }
+
 /* ---------- Dialog ---------- */
 
 .dialog { max-width: min(420px, calc(100vw - 32px)); color: var(--text); background: var(--panel); border: 1px solid var(--rule); border-radius: 12px; padding: 20px; }

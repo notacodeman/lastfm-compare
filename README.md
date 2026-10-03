@@ -2,7 +2,16 @@
 
 Compare two to six Last.fm users' full scrobble histories (each person's card also has a CSV download): head-to-head stats, genres, shared and unique artists, albums and tracks, how much your listening overlaps, and scrobbles over time.
 
-The **Compare** tab also has **compatibility over time**: the same "listening in common" measure for each calendar year, per pair.
+The **Compare** tab also has:
+
+- **Compatibility over time**: the same "listening in common" measure for each calendar year, per pair.
+- **Genres**: a butterfly chart for two people (one person's shares to the left, the other's to the right), grouped bars for more.
+- **Side by side** (two people at a time): a log-scale scatter of every shared artist/album/track (plays each, with a "same share" line), lists of what leans most to each person, and both top 25s side by side with lines joining what's on both.
+- **Who played it first**: across everyone's whole history, who scrobbled each shared item first when they were ahead by 30+ days, with the biggest head starts. It shows who got there first, not who introduced whom.
+- **When you listen**: hour-of-day and day-of-week lines per person, as shares of each person's scrobbles.
+- **Listening over time** can show a running total instead of per month.
+
+Reports also have **Top artists month by month**: a bump chart of the 10 most played artists' rank in each of the 12 months.
 
 Click any **artist name** to open the artist page: plays, rank, first and last play, biggest day, peak month and longest streak for everyone you've added, plays by month as a line per person, and each person's top tracks and albums.
 
@@ -40,11 +49,13 @@ A report for a period still under way is compared with the previous period up to
 | `js/genres.js` | Genre shares and variety from artist tags (no DOM) |
 | `js/genre-loader.js` | Loads artist tags (IndexedDB, then Last.fm) and keeps them in memory |
 | `js/report-view.js` | HTML and charts for the Reports tab |
+| `js/pair.js` | Maths for the side-by-side charts (no DOM): taste scatter points, leans, rank lists, who was first, clocks, monthly ranks |
+| `js/compare-charts.js` | HTML and charts for Side by side, Who played it first and When you listen |
 | `js/artist.js` | One artist's history for one person, and the CSV export (no DOM) |
 | `js/artist-view.js` | The artist page |
 | `js/share-card.js` | Draws a report as a PNG image |
 | `data/genre-tags.js` | Tags that aren't genres, and genre spellings to merge |
-| `js/charts.js` | SVG Venn diagram, "shared by how many" bars, line, column and stacked-share charts, all with hover tooltips |
+| `js/charts.js` | SVG Venn diagram, "shared by how many" bars, line, column, stacked-share, scatter, slope and bump charts, all with hover tooltips |
 | `js/render.js` | HTML for the people cards, stats table, overlap, shared table and unique lists |
 | `js/snap.js` | Gentle snapping onto section headers after the user scrolls |
 | `js/app.js` | State, events, URL state, and the order things run in |

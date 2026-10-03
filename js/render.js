@@ -189,9 +189,20 @@ export function renderGenreCompare(people, genres) {
   const names = [...average].sort((a, b) => b[1] - a[1]).slice(0, GENRES_SHOWN).map(([name]) => name);
   const shareOf = (g, name) => g.shares.find(s => s.name === name)?.share || 0;
   const max = Math.max(0.01, ...names.flatMap(name => genres.map(g => shareOf(g, name))));
+  if (people.length === 2 && names.length) { renderButterfly(people, genres, names, shareOf, max); return; }
   $('#genreCompare').innerHTML = names.length ? `<div class="genre-compare">${names.map(name => `
     <div class="genre-group"><div class="genre-name">${esc(name)}</div><div class="bar-rows">${people.map((p, i) => {
       const share = shareOf(genres[i], name);
       return `<div class="bar-row person-bar"><span>${swatch(p.slot)}${esc(p.profile.name)}</span><div class="bar"><span style="width:${(share / max) * 100}%;background:${color(p.slot)}"></span></div><span class="value">${Math.round(share * 100)}%</span></div>`;
     }).join('')}</div></div>`).join('')}</div>` : '<p class="muted">No tags found for these artists.</p>';
+}
+
+// Two people: genres down the middle, one person's share growing left, the other's right.
+function renderButterfly(people, genres, names, shareOf, max) {
+  const [a, b] = people;
+  const side = (person, share, dir) => `<div class="fly-side ${dir}"><span class="value">${Math.round(share * 100)}%</span><div class="bar">${share ? `<span style="width:${(share / max) * 100}%;background:${color(person.slot)}"></span>` : ''}</div></div>`;
+  $('#genreCompare').innerHTML = `<div class="butterfly">
+    <div class="fly-row fly-head"><div class="fly-side left">${swatch(a.slot)}${esc(a.profile.name)}</div><div></div><div class="fly-side right">${swatch(b.slot)}${esc(b.profile.name)}</div></div>
+    ${names.map(name => `<div class="fly-row">${side(a, shareOf(genres[0], name), 'left')}<div class="fly-name">${esc(name)}</div>${side(b, shareOf(genres[1], name), 'right')}</div>`).join('')}
+  </div>`;
 }

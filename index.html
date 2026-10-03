@@ -95,6 +95,42 @@
    <div class="panel" id="genreCompare"></div>
   </section>
 
+  <section class="section" id="pair">
+   <div class="section-head">
+    <h2>Side by side</h2>
+    <div class="section-tools" id="pairTools" hidden>
+     <select id="pairA" aria-label="First person"></select>
+     <span class="muted vs">vs</span>
+     <select id="pairB" aria-label="Second person"></select>
+    </div>
+   </div>
+   <div class="pair-grid">
+    <div class="panel">
+     <h3 id="scatterTitle">Shared artists</h3>
+     <div class="chart compact" id="scatterChart"></div>
+     <p class="note" id="scatterNote"></p>
+    </div>
+    <div class="lean-lists">
+     <div class="panel list-panel" id="leanA"></div>
+     <div class="panel list-panel" id="leanB"></div>
+    </div>
+   </div>
+   <div class="panel slope-panel">
+    <h3 id="slopeTitle">Top 25 side by side</h3>
+    <div class="chart compact" id="slopeChart"></div>
+    <p class="note">Lines join anything on both lists. Grey numbers are where something ranks for the other person (– if they never played it in this period). Click a name to open its artist.</p>
+   </div>
+  </section>
+
+  <section class="section" id="firsts">
+   <h2>Who played it first</h2>
+   <p class="note" id="firstsNote"></p>
+   <div class="pair-grid">
+    <div class="panel" id="firstsCounts"></div>
+    <div class="panel list-panel" id="firstsList"></div>
+   </div>
+  </section>
+
   <section class="section" id="shared">
    <div class="section-head">
     <h2 id="sharedTitle">Shared</h2>
@@ -117,8 +153,24 @@
    <div class="unique-grid" id="uniqueGrid"></div>
   </section>
 
+  <section class="section" id="clocks">
+   <h2>When you listen</h2>
+   <div class="legend" id="clockLegend"></div>
+   <div class="two-grid">
+    <div class="panel"><h3>Hour of day</h3><div class="chart compact" id="hourChart"></div></div>
+    <div class="panel"><h3>Day of week</h3><div class="chart compact" id="weekdayChart"></div></div>
+   </div>
+   <p class="note">Share of each person's scrobbles in this period, so a heavy listener doesn't drown out the others.</p>
+  </section>
+
   <section class="section" id="timeline">
-   <h2>Listening over time</h2>
+   <div class="section-head">
+    <h2>Listening over time</h2>
+    <div class="segmented" id="timelineMode">
+     <button type="button" data-mode="month">Per month</button>
+     <button type="button" data-mode="total">Running total</button>
+    </div>
+   </div>
    <div class="panel">
     <div class="legend" id="timelineLegend"></div>
     <div class="chart-scroll"><div class="chart" id="timelineChart"></div></div>
@@ -196,6 +248,12 @@
     <h2>Month by month</h2>
     <div class="panel table-panel"><div class="hscroll"><div class="table" id="rMonthTable"></div></div></div>
     <p class="note">Click a month to open its report.</p>
+   </section>
+
+   <section class="section" id="rBump">
+    <h2>Top artists month by month</h2>
+    <p class="note" id="rBumpNote">Each month's rank for the 10 most played artists over these 12 months. Point at a line to follow it; click to open the artist.</p>
+    <div class="panel"><div class="chart-scroll"><div class="chart" id="rBumpChart"></div></div></div>
    </section>
 
    <section class="section" id="rClock">
