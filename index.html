@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Scrobble Compare</title>
+<meta name="description" content="Compare two or more Last.fm users' full scrobble histories: shared and unique artists, tracks and albums, overlap, and listening over time.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Albert+Sans:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<header class="nav">
+ <a class="logo" href="./"><span class="logo-mark" aria-hidden="true"></span>Scrobble Compare</a>
+ <a class="home" href="https://codeman.club">codeman.club</a>
+</header>
+
+<main class="wrap">
+ <section class="intro">
+  <h1>Compare Last.fm listening</h1>
+  <p class="lead">Add two or more Last.fm usernames. Each full scrobble history downloads once and is saved in this browser, so later visits only fetch what's new.</p>
+  <form id="addForm" class="add-form" autocomplete="off">
+   <label class="sr-only" for="userInput">Last.fm username</label>
+   <input id="userInput" type="text" placeholder="Last.fm username" spellcheck="false" autocapitalize="off" maxlength="40" required>
+   <button type="submit" class="btn primary">Add</button>
+  </form>
+  <p class="note">The first download takes a while for big libraries: Last.fm sends 200 scrobbles per request, so 100,000 scrobbles is about 500 requests, a couple of minutes. You can start comparing as soon as two people have finished. If you close the tab, the download picks up where it stopped.</p>
+  <p class="error" id="addError" hidden></p>
+  <ul id="people" class="people" aria-live="polite"></ul>
+ </section>
+
+ <div id="results" hidden>
+  <div class="controls" role="group" aria-label="Comparison settings">
+   <div class="control">
+    <span class="control-label">Compare</span>
+    <div class="segmented" id="kindPicker">
+     <button type="button" data-kind="artists">Artists</button>
+     <button type="button" data-kind="albums">Albums</button>
+     <button type="button" data-kind="tracks">Tracks</button>
+    </div>
+   </div>
+   <div class="control">
+    <label class="control-label" for="periodPicker">Period</label>
+    <select id="periodPicker"></select>
+   </div>
+   <div class="control">
+    <label class="control-label" for="minPlaysPicker">Counts if played</label>
+    <select id="minPlaysPicker">
+     <option value="1">at least once</option>
+     <option value="3">3+ times</option>
+     <option value="10">10+ times</option>
+     <option value="25">25+ times</option>
+    </select>
+   </div>
+  </div>
+  <p class="note waiting" id="waitingNote" hidden></p>
+
+  <section class="section" id="stats">
+   <h2>Head to head</h2>
+   <div class="hscroll"><table class="stats-table" id="statsTable"></table></div>
+  </section>
+
+  <section class="section" id="overlap">
+   <h2>Overlap</h2>
+   <div class="overlap-grid">
+    <div class="panel" id="vennPanel"></div>
+    <div class="panel" id="matchPanel"></div>
+   </div>
+  </section>
+
+  <section class="section" id="shared">
+   <div class="section-head">
+    <h2 id="sharedTitle">Shared</h2>
+    <div class="section-tools">
+     <select id="sharedByPicker" hidden aria-label="Shared by">
+      <option value="2">by 2 or more</option>
+      <option value="all">by everyone</option>
+     </select>
+     <input id="sharedSearch" type="search" placeholder="Search" aria-label="Search shared items">
+    </div>
+   </div>
+   <div class="panel table-panel">
+    <div class="hscroll"><div class="table" id="sharedTable"></div></div>
+   </div>
+   <p class="note" id="sharedNote"></p>
+  </section>
+
+  <section class="section" id="unique">
+   <h2 id="uniqueTitle">Only one of you</h2>
+   <div class="unique-grid" id="uniqueGrid"></div>
+  </section>
+
+  <section class="section" id="timeline">
+   <h2>Listening over time</h2>
+   <div class="panel">
+    <div class="legend" id="timelineLegend"></div>
+    <div class="chart-scroll"><div class="chart" id="timelineChart"></div></div>
+   </div>
+  </section>
+ </div>
+</main>
+
+<footer class="footer">
+ Data from Last.fm, saved only in your browser. Not affiliated with Last.fm.
+ <button type="button" class="link-btn" id="clearSaved">Clear saved histories</button> ·
+ <a href="https://github.com/notacodeman/lastfm-compare" target="_blank" rel="noopener">Source on GitHub</a>
+</footer>
+
+<dialog id="clearDialog" class="dialog">
+ <form method="dialog">
+  <h3>Clear saved histories?</h3>
+  <p>Every scrobble history saved in this browser is deleted. The next comparison downloads them again from the start.</p>
+  <div class="dialog-buttons"><button class="btn" value="cancel">Cancel</button><button class="btn primary" value="clear">Clear</button></div>
+ </form>
+</dialog>
+
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
