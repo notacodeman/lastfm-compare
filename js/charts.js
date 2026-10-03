@@ -168,3 +168,135 @@ export function lineChart(container, { keys, series, labelFor, isYearStart }) {
   hit.addEventListener('pointerdown', show);
   hit.addEventListener('pointerleave', hide);
 }
+
+// ---------- Shared bits for the column charts below
+
+// Redraw a chart when (and only when) its container's width changes.
+const drawers = new WeakMap();
+const resizeObserver = new ResizeObserver(entries => {
+  for (const entry of entries) {
+    const item = drawers.get(entry.target);
+    const width = Math.round(entry.contentRect.width);
+    if (item && width && width !== item.width) { item.width = width; item.draw(); }
+  }
+});
+export function drawResponsive(container, draw) {
+  const known = drawers.get(container);
+  drawers.set(container, { draw, width: known?.width || 0 });
+  if (!known) resizeObserver.observe(container);
+  if (container.clientWidth) { drawers.get(container).width = Math.round(container.clientWidth); draw(); }
+}
+
+function yAxis(max, y, left, right) {
+  const step = niceStep(max / 4);
+  const top = Math.ceil(max / step) * step || step;
+  const lines = [];
+  for (let v = 0; v <= top + 1e-9; v += step) lines.push(v);
+  return { top, svg: lines.map(v => `<line x1="${left}" x2="${right}" y1="${y(v, top)}" y2="${y(v, top)}"/><text x="${left - 8}" y="${y(v, top)}" text-anchor="end" dominant-baseline="middle">${fmtTick(v)}</text>`).join('') };
+}
+const fmtTick = v => v >= 1000 ? `${+(v / 1000).toFixed(1)}k` : fmt(v);
+
+// A bar whose top corners are rounded, anchored flat on the baseline.
+function barPath(x, y, w, h) {
+  if (h <= 0) return '';
+  const r = Math.min(4, w / 2, h);
+  return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
+}
+
+function attachTooltip(container, svg, bands, html) {
+  const tooltip = container.querySelector('.tooltip');
+  const highlight = svg.querySelector('.band-highlight');
+  svg.querySelectorAll('.band').forEach((band, i) => {
+    const show = () => {
+      highlight.setAttribute('x', bands[i].x);
+      highlight.setAttribute('width', bands[i].w);
+      highlight.setAttribute('visibility', 'visible');
+      tooltip.innerHTML = html(i);
+      tooltip.hidden = false;
+      const box = svg.getBoundingClientRect();
+      const scale = box.width / svg.viewBox.baseVal.width;
+      const left = (bands[i].x + bands[i].w) * scale;
+      const flip = left + tooltip.offsetWidth + 12 > box.width;
+      tooltip.style.left = `${flip ? bands[i].x * scale - tooltip.offsetWidth - 8 : left + 8}px`;
+      tooltip.style.top = '8px';
+    };
+    band.addEventListener('pointerenter', show);
+    band.addEventListener('pointerdown', show);
+  });
+  svg.addEventListener('pointerleave', () => { tooltip.hidden = true; highlight.setAttribute('visibility', 'hidden'); });
+}
+
+function xLabels(labels, bands, height, minGap) {
+  const every = Math.max(1, Math.ceil(minGap / (bands[0]?.w || minGap)));
+  return labels.map((label, i) => i % every ? '' :
+    `<text x="${bands[i].x + bands[i].w / 2}" y="${height - 8}" text-anchor="middle">${esc(label)}</text>`).join('');
+}
+
+// ---------- Columns: one value per bucket, with an optional previous-period marker on each
+
+// values: numbers; previous: numbers or null per bucket; slot: the person's colour
+export function columnChart(container, { labels, values, previous, slot, tooltip, height = 230, minLabelGap = 30 }) {
+  drawResponsive(container, () => {
+    const width = container.clientWidth;
+    const m = { top: 10, right: 8, bottom: 26, left: 44 };
+    const plotW = width - m.left - m.right, plotH = height - m.top - m.bottom;
+    const max = Math.max(1, ...values, ...(previous || []).filter(v => v != null));
+    const y = (v, top) => m.top + plotH - (v / top) * plotH;
+    const axis = yAxis(max, y, m.left, width - m.right);
+    const band = plotW / values.length;
+    const bands = values.map((_, i) => ({ x: m.left + i * band, w: band }));
+    const barW = Math.max(2, Math.min(band - 2, band * 0.72));
+    const bars = values.map((v, i) => {
+      const x = bands[i].x + (band - barW) / 2;
+      return barPath(x, y(v, axis.top), barW, m.top + plotH - y(v, axis.top));
+    }).join('');
+    const marks = (previous || []).map((v, i) => v == null ? '' : (() => {
+      const x = bands[i].x + (band - barW) / 2 - 1;
+      return `<line class="previous" x1="${x}" x2="${x + barW + 2}" y1="${y(v, axis.top)}" y2="${y(v, axis.top)}"/>`;
+    })()).join('');
+    container.innerHTML = `
+      <svg viewBox="0 0 ${width} ${height}" height="${height}" role="img">
+        <g class="grid axis">${axis.svg}</g>
+        <rect class="band-highlight" y="${m.top}" height="${plotH}" visibility="hidden"/>
+        <path d="${bars}" fill="var(--person-${slot})"/>
+        <g>${marks}</g>
+        <g class="axis">${xLabels(labels, bands, height, minLabelGap)}</g>
+        ${bands.map(b => `<rect class="band" x="${b.x}" y="0" width="${b.w}" height="${height}" fill="transparent"/>`).join('')}
+      </svg>
+      <div class="tooltip" hidden></div>`;
+    attachTooltip(container, container.querySelector('svg'), bands, tooltip);
+  });
+}
+
+// ---------- 100% stacked columns: each bucket split into shares (genres month by month)
+
+// series: [{ name, color, values: shares 0..1 }], drawn bottom-up in order
+export function stackedShareChart(container, { labels, series, tooltip, height = 260 }) {
+  drawResponsive(container, () => {
+    const width = container.clientWidth;
+    const m = { top: 10, right: 8, bottom: 26, left: 44 };
+    const plotW = width - m.left - m.right, plotH = height - m.top - m.bottom;
+    const y = v => m.top + plotH - v * plotH;
+    const band = plotW / labels.length;
+    const bands = labels.map((_, i) => ({ x: m.left + i * band, w: band }));
+    const barW = Math.max(4, Math.min(band - 4, band * 0.7));
+    const GAP = 2;   // surface-coloured gap between stacked segments
+    const segments = series.map(s => `<g fill="${s.color}">${labels.map((_, i) => {
+      const below = series.slice(0, series.indexOf(s)).reduce((sum, t) => sum + (t.values[i] || 0), 0);
+      const v = s.values[i] || 0;
+      const h = v * plotH - GAP;
+      return h > 0 ? `<rect x="${bands[i].x + (band - barW) / 2}" y="${y(below + v) + GAP / 2}" width="${barW}" height="${h}" rx="2"/>` : '';
+    }).join('')}</g>`).join('');
+    const grid = [0, .25, .5, .75, 1].map(v => `<line x1="${m.left}" x2="${width - m.right}" y1="${y(v)}" y2="${y(v)}"/><text x="${m.left - 8}" y="${y(v)}" text-anchor="end" dominant-baseline="middle">${v * 100}%</text>`).join('');
+    container.innerHTML = `
+      <svg viewBox="0 0 ${width} ${height}" height="${height}" role="img">
+        <g class="grid axis">${grid}</g>
+        <rect class="band-highlight" y="${m.top}" height="${plotH}" visibility="hidden"/>
+        ${segments}
+        <g class="axis">${xLabels(labels, bands, height, 34)}</g>
+        ${bands.map(b => `<rect class="band" x="${b.x}" y="0" width="${b.w}" height="${height}" fill="transparent"/>`).join('')}
+      </svg>
+      <div class="tooltip" hidden></div>`;
+    attachTooltip(container, container.querySelector('svg'), bands, tooltip);
+  });
+}

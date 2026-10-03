@@ -110,7 +110,7 @@ export async function artistTags(artist, signal) {
   let tags = [];
   try {
     const data = await call('artist.gettoptags', { artist, autocorrect: 1 }, signal);
-    tags = [].concat(data.toptags?.tag || []).slice(0, 5).map(t => ({ name: t.name.toLowerCase(), count: +t.count || 0 }));
+    tags = [].concat(data.toptags?.tag || []).slice(0, 10).map(t => ({ name: t.name.toLowerCase(), count: +t.count || 0 }));
   } catch (err) {
     if (signal?.aborted) throw err;
     return [];   // tags are a nice-to-have; don't fail the comparison over them

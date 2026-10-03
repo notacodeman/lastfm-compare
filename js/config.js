@@ -18,3 +18,8 @@ export const TAG_ARTISTS = 10;              // top artists per person used to gu
 export const DAILY_CHART_UP_TO_DAYS = 120;  // longer periods are charted by month
 
 export const SNAP_DISTANCE_PX = 80;         // section headers this close to the top get snapped to
+
+export const GENRE_ARTISTS = 40;            // top artists per person and period whose tags make up the genres
+export const GENRE_ARTISTS_PER_MONTH = 15;  // the same, per month in "genres month by month"
+export const GENRES_SHOWN = 12;             // genres listed in a report / compared
+export const GENRES_STACKED = 7;            // genres in the month-by-month chart; the rest is "Other"

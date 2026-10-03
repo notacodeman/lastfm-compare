@@ -1,7 +1,7 @@
 // Turns state and comparison results into HTML. Each function fills one part of the page.
 
 import { $, esc, fmt, fmtDate, fmtMonth, fitRows } from './util.js';
-import { TABLE_ROWS, PANEL_ROWS, MAX_RENDERED_ROWS } from './config.js';
+import { TABLE_ROWS, PANEL_ROWS, MAX_RENDERED_ROWS, GENRES_SHOWN } from './config.js';
 import { vennSvg, sharedByBars, overlapMatrix } from './charts.js';
 
 const color = slot => `var(--person-${slot})`;
@@ -89,7 +89,7 @@ export function renderStats(people, stats, kind) {
     row('Tracks', stats.map(s => s.tracks)),
     row(`Played shared ${NOUN[kind]} first`, stats.map(s => s.foundFirst)),
     textRow('Top artist', stats.map(s => s.topArtist ? `${esc(s.topArtist.name)}<span class="sub">${fmt(s.topArtist.plays)} plays</span>` : '—')),
-    textRow('Top tags', stats.map(() => '<span class="sub">…</span>'), 'tags'),
+    textRow('Top genres', stats.map(() => '<span class="sub">…</span>'), 'tags'),
     textRow('Scrobbling since', stats.map(s => fmtDate(s.firstEver))),
   ].join('') + '</tbody>';
 }
@@ -181,4 +181,19 @@ export function renderUnique(people, unique, kind) {
 
 export function renderLegend(people) {
   $('#timelineLegend').innerHTML = people.map(p => `<span>${swatch(p.slot)}${esc(p.profile.name)}</span>`).join('');
+}
+
+// ---------- Genres compared: the genres that lead across everyone, each with a bar per person
+
+export function renderGenreCompare(people, genres) {
+  const average = new Map();
+  genres.forEach(g => g.shares.forEach(s => average.set(s.name, (average.get(s.name) || 0) + s.share / genres.length)));
+  const names = [...average].sort((a, b) => b[1] - a[1]).slice(0, GENRES_SHOWN).map(([name]) => name);
+  const shareOf = (g, name) => g.shares.find(s => s.name === name)?.share || 0;
+  const max = Math.max(0.01, ...names.flatMap(name => genres.map(g => shareOf(g, name))));
+  $('#genreCompare').innerHTML = names.length ? `<div class="genre-compare">${names.map(name => `
+    <div class="genre-group"><div class="genre-name">${esc(name)}</div><div class="bar-rows">${people.map((p, i) => {
+      const share = shareOf(genres[i], name);
+      return `<div class="bar-row person-bar"><span>${swatch(p.slot)}${esc(p.profile.name)}</span><div class="bar"><span style="width:${(share / max) * 100}%;background:${color(p.slot)}"></span></div><span class="value">${Math.round(share * 100)}%</span></div>`;
+    }).join('')}</div></div>`).join('')}</div>` : '<p class="muted">No tags found for these artists.</p>';
 }

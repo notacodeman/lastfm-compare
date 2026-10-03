@@ -31,6 +31,14 @@
  </section>
 
  <div id="results" hidden>
+  <div class="view-tabs" role="tablist" aria-label="View">
+   <button type="button" role="tab" data-view="compare">Compare</button>
+   <button type="button" role="tab" data-view="report">Reports</button>
+  </div>
+
+  <div id="compareView">
+  <p class="note" id="compareNeedsTwo" hidden>Add someone else above to compare with. Meanwhile, the Reports tab works for one person.</p>
+  <div id="compareBody">
   <div class="controls" role="group" aria-label="Comparison settings">
    <div class="control">
     <span class="control-label">Compare</span>
@@ -69,6 +77,12 @@
    </div>
   </section>
 
+  <section class="section" id="genres">
+   <h2>Genres</h2>
+   <p class="note" id="genreStatus"></p>
+   <div class="panel" id="genreCompare"></div>
+  </section>
+
   <section class="section" id="shared">
    <div class="section-head">
     <h2 id="sharedTitle">Shared</h2>
@@ -98,6 +112,91 @@
     <div class="chart-scroll"><div class="chart" id="timelineChart"></div></div>
    </div>
   </section>
+  </div>
+  </div>
+
+  <div id="reportView" hidden>
+   <div class="controls" role="group" aria-label="Report settings">
+    <div class="control">
+     <span class="control-label">Person</span>
+     <div class="segmented" id="reportPerson"></div>
+    </div>
+    <div class="control">
+     <span class="control-label">Report</span>
+     <div class="segmented" id="reportUnit">
+      <button type="button" data-unit="week">Week</button>
+      <button type="button" data-unit="month">Month</button>
+      <button type="button" data-unit="year">Year</button>
+     </div>
+    </div>
+    <div class="control">
+     <label class="control-label" for="reportPeriodPicker">Period</label>
+     <div class="period-nav">
+      <button type="button" class="btn icon" id="periodPrev" aria-label="Previous period">‹</button>
+      <select id="reportPeriodPicker"></select>
+      <button type="button" class="btn icon" id="periodNext" aria-label="Next period">›</button>
+     </div>
+    </div>
+   </div>
+
+   <section class="section" id="rSummary">
+    <h2 id="reportTitle">Report</h2>
+    <div class="tiles" id="reportTiles"></div>
+    <div class="facts" id="reportFacts"></div>
+   </section>
+
+   <section class="section" id="rDays">
+    <h2 id="rDaysTitle">Scrobbles by day</h2>
+    <div class="panel">
+     <div class="legend" id="rDaysLegend"></div>
+     <div class="chart-scroll"><div class="chart" id="rDaysChart"></div></div>
+    </div>
+   </section>
+
+   <section class="section" id="rTop">
+    <h2>Top artists, albums and tracks</h2>
+    <div class="three-grid" id="rTopGrid"></div>
+   </section>
+
+   <section class="section" id="rNew">
+    <h2>New to you</h2>
+    <p class="note">Played for the first time ever in this period.</p>
+    <div class="three-grid" id="rNewGrid"></div>
+   </section>
+
+   <section class="section" id="rGenres">
+    <h2>Genres</h2>
+    <p class="note" id="rGenreStatus"></p>
+    <div class="genre-grid">
+     <div class="panel" id="rGenreTop"></div>
+     <div class="panel">
+      <h3 id="rGenreMonthsTitle">Genres month by month</h3>
+      <div class="legend" id="rGenreLegend"></div>
+      <div class="chart-scroll"><div class="chart" id="rGenreChart"></div></div>
+     </div>
+    </div>
+   </section>
+
+   <section class="section" id="rMonths">
+    <h2>Month by month</h2>
+    <div class="panel table-panel"><div class="hscroll"><div class="table" id="rMonthTable"></div></div></div>
+    <p class="note">Click a month to open its report.</p>
+   </section>
+
+   <section class="section" id="rClock">
+    <h2>When you listen</h2>
+    <div class="two-grid">
+     <div class="panel"><h3 id="rHourTitle">Hour of day</h3><div class="chart compact" id="rHourChart"></div></div>
+     <div class="panel"><h3>Day of week</h3><div class="chart compact" id="rWeekdayChart"></div></div>
+    </div>
+   </section>
+
+   <section class="section" id="rFingerprint">
+    <h2>Listening fingerprint</h2>
+    <p class="note">The same period for everyone you've added.</p>
+    <div class="panel" id="rFingerprintPanel"></div>
+   </section>
+  </div>
  </div>
 </main>
 
