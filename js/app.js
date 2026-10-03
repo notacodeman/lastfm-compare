@@ -2,10 +2,10 @@
 
 import { $, esc, nowSec, download as saveFile } from './util.js';
 import { MAX_PEOPLE, DAILY_CHART_UP_TO_DAYS, GENRE_ARTISTS } from './config.js';
-import { fetchProfile, fetchHistory } from './history.js';
+import { fetchProfile, fetchHistory, savedPeople } from './history.js';
 import { clearAll } from './store.js';
 import { KINDS, periodRange, summarize, compare, overlap, perDay, countByBucket, bucketAxis, bucketKey, nameKey } from './analyze.js';
-import { renderPeople, renderProgress, renderStats, renderTags, renderOverlap, renderShared, renderUnique, renderLegend, renderGenreCompare } from './render.js';
+import { renderPeople as drawPeople, renderProgress, renderStats, renderTags, renderOverlap, renderShared, renderUnique, renderLegend, renderGenreCompare } from './render.js';
 import { lineChart, drawResponsive } from './charts.js';
 import { UNITS, periodFromKey, reportPeriod, shiftPeriod, periodLabel, rowsBetween } from './report.js';
 import { renderReport, periodOptions, currentReport as shownReport } from './report-view.js';
@@ -79,6 +79,12 @@ function writeUrl() {
 
 // ---------- People
 
+// Redraws the cards, and lets the equalizer in the header play while anything is downloading.
+function renderPeople(people) {
+  drawPeople(people);
+  document.body.classList.toggle('busy', people.some(p => p.status === 'loading'));
+}
+
 function addPerson(input) {
   const username = input.trim();
   const error = $('#addError');
@@ -124,6 +130,7 @@ async function download(person) {
   }
   renderPeople(state.people);
   update();
+  renderSaved();
 }
 
 function onPersonAction(event) {
@@ -147,9 +154,25 @@ function onPersonAction(event) {
       state.people.splice(state.people.indexOf(person), 1);
       writeUrl();
       update();
+      renderSaved();
       break;
   }
   renderPeople(state.people);
+}
+
+// Names saved in this browser, as buttons that add them (so you don't have to remember spellings).
+let savedRun = 0;   // only the latest call draws, since several can be in flight
+async function renderSaved() {
+  const run = ++savedRun;
+  const saved = await savedPeople();
+  if (run !== savedRun) return;
+  const added = new Set(state.people.map(p => p.key));
+  const box = $('#savedPeople');
+  const available = saved.filter(p => !added.has(p.key));
+  box.hidden = !available.length;
+  box.innerHTML = `<span class="control-label">Saved in this browser</span>${available.map(p =>
+    `<button type="button" class="chip" data-saved="${esc(p.name)}">${esc(p.name)}${p.scrobbles != null ? `<small>${p.scrobbles.toLocaleString('en-US')}</small>` : ''}</button>`).join('')}${
+    available.length > 1 ? '<button type="button" class="chip add-all" data-saved-all>Add all</button>' : ''}`;
 }
 
 // ---------- Comparison
@@ -437,8 +460,18 @@ $('#addForm').addEventListener('submit', event => {
   const input = $('#userInput');
   input.value.split(/[\s,]+/).forEach(addPerson);
   input.value = '';
+  renderSaved();
 });
 $('#people').addEventListener('click', onPersonAction);
+$('#savedPeople').addEventListener('click', event => {
+  const chip = event.target.closest('[data-saved], [data-saved-all]');
+  if (!chip) return;
+  const names = chip.dataset.savedAll != null
+    ? [...$('#savedPeople').querySelectorAll('[data-saved]')].map(c => c.dataset.saved)
+    : [chip.dataset.saved];
+  names.forEach(addPerson);
+  renderSaved();
+});
 
 $('#kindPicker').addEventListener('click', event => {
   const kind = event.target.closest('[data-kind]')?.dataset.kind;
@@ -535,5 +568,16 @@ new ResizeObserver(entries => {
 }).observe($('#timelineChart'));
 
 enableSectionSnap('.section > h2, .section-head h2');
+// A static waveform above the footer, drawn once (just decoration).
+function drawWaveform() {
+  const bars = Array.from({ length: 160 }, (_, i) => {
+    const h = 0.18 + 0.82 * Math.abs(Math.sin(i * 0.37) * Math.cos(i * 0.11) * Math.sin(i * 0.053 + 1));
+    return `<i style="height:${Math.round(h * 100)}%"></i>`;
+  });
+  $('#waveform').innerHTML = bars.join('');
+}
+drawWaveform();
+
 readUrl().slice(0, MAX_PEOPLE).forEach(addPerson);
+renderSaved();
 syncControls();

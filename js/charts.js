@@ -69,33 +69,41 @@ function niceStep(rough) {
 
 // series: [{ name, slot, values }] where null means "not scrobbling yet" (no line drawn),
 // keys: bucket keys, labelFor(key, short) -> text
-// Options: format(value) for axis and tooltip numbers, showTotal (default true), max (fixed top of the axis).
-// A series can set `color` instead of a person `slot`.
-export function lineChart(container, { keys, series, labelFor, isYearStart, format = fmt, showTotal = true, max: fixedMax }) {
+// Options: format(value) for axis and tooltip numbers, showTotal (default true), max (fixed top of the axis),
+// details (default true): each line's peak and latest value labelled, year gridlines, and an average line
+// when there's only one series. A series can set `color` instead of a person `slot`.
+export function lineChart(container, { keys, series, labelFor, isYearStart, format = fmt, showTotal = true, max: fixedMax, details = true }) {
   const stroke = s => s.color || color(s.slot);
   const width = container.clientWidth;
-  const plotW = width - MARGIN.left - MARGIN.right;
-  const plotH = HEIGHT - MARGIN.top - MARGIN.bottom;
-  const max = fixedMax ?? Math.max(1, ...series.flatMap(s => s.values).filter(v => v != null));
+  const labelled = details && series.length <= 4;
+  const M = { ...MARGIN, right: labelled ? 62 : MARGIN.right };
+  const plotW = width - M.left - M.right;
+  const plotH = HEIGHT - M.top - M.bottom;
+  const all = series.flatMap(s => s.values).filter(v => v != null);
+  const max = fixedMax ?? Math.max(1, ...all) * (labelled ? 1.12 : 1);   // headroom for peak labels
   const step = niceStep(max / 4);
   const top = Math.ceil(max / step) * step;
-  const x = i => MARGIN.left + (keys.length === 1 ? plotW / 2 : (i / (keys.length - 1)) * plotW);
-  const y = v => MARGIN.top + plotH - (v / top) * plotH;
+  const x = i => M.left + (keys.length === 1 ? plotW / 2 : (i / (keys.length - 1)) * plotW);
+  const y = v => M.top + plotH - (v / top) * plotH;
 
   const grid = [];
   for (let v = 0; v <= top + step / 1000; v += step) {
-    grid.push(`<line x1="${MARGIN.left}" x2="${width - MARGIN.right}" y1="${y(v)}" y2="${y(v)}"/>`);
-    grid.push(`<text x="${MARGIN.left - 8}" y="${y(v)}" text-anchor="end" dominant-baseline="middle">${format(v)}</text>`);
+    grid.push(`<line x1="${M.left}" x2="${width - M.right}" y1="${y(v)}" y2="${y(v)}"/>`);
+    grid.push(`<text x="${M.left - 8}" y="${y(v)}" text-anchor="end" dominant-baseline="middle">${format(v)}</text>`);
   }
 
   // x labels: on long monthly charts, a year at each January (skipping years if they'd crowd);
   // otherwise evenly spaced, at least ~70px apart
-  const xLabels = [];
+  const xLabels = [], yearLines = [];
   const label = i => xLabels.push(`<text x="${x(i)}" y="${HEIGHT - 8}" text-anchor="middle">${esc(labelFor(keys[i], true))}</text>`);
   if (isYearStart && keys.length > 30) {
     const pxPerYear = plotW / (keys.length / 12);
     const yearStep = Math.max(1, Math.ceil(50 / pxPerYear));
-    keys.forEach((key, i) => { if (isYearStart(key) && +key.slice(0, 4) % yearStep === 0) label(i); });
+    keys.forEach((key, i) => {
+      if (!isYearStart(key)) return;
+      if (details) yearLines.push(`<line x1="${x(i)}" x2="${x(i)}" y1="${M.top}" y2="${M.top + plotH}"/>`);
+      if (+key.slice(0, 4) % yearStep === 0) label(i);
+    });
   } else {
     const every = Math.max(1, Math.ceil(keys.length / (plotW / 70)));
     keys.forEach((_, i) => { if (i % every === 0) label(i); });
@@ -111,16 +119,46 @@ export function lineChart(container, { keys, series, labelFor, isYearStart, form
     return `<path class="series" d="${d}" stroke="${stroke(s)}"/>`;
   }).join('');
 
+  // Details: peak of each line, latest value at the right edge, average for a single line
+  let marks = '';
+  if (labelled) {
+    const placed = [];
+    series.forEach(s => {
+      let peak = -1;
+      s.values.forEach((v, i) => { if (v != null && (peak < 0 || v > s.values[peak])) peak = i; });
+      if (peak < 0 || !s.values[peak]) return;
+      const px = x(peak), py = y(s.values[peak]);
+      let ly = py - 9;
+      while (placed.some(p => Math.abs(p.x - px) < 110 && Math.abs(p.y - ly) < 13)) ly -= 13;   // stack clashing labels
+      placed.push({ x: px, y: ly });
+      const anchor = px > M.left + plotW - 60 ? 'end' : px < M.left + 60 ? 'start' : 'middle';
+      marks += `<circle class="peak" cx="${px}" cy="${py}" r="3.5" fill="${stroke(s)}"/>
+        <text class="mark-label" x="${px}" y="${Math.max(10, ly)}" text-anchor="${anchor}">${series.length > 1 ? `${esc(s.name)} ` : ''}peak ${format(s.values[peak])} · ${esc(labelFor(keys[peak], false))}</text>`;
+    });
+    const ends = series.map(s => {
+      const i = s.values.findLastIndex(v => v != null);
+      return i < 0 ? null : { s, i, y: y(s.values[i]) };
+    }).filter(Boolean).sort((p, q) => p.y - q.y);
+    for (let n = 1; n < ends.length; n++) ends[n].y = Math.max(ends[n].y, ends[n - 1].y + 13);   // keep end labels apart
+    marks += ends.map(e => `<text class="end-value" x="${width - M.right + 8}" y="${e.y}" dominant-baseline="middle"><tspan fill="${stroke(e.s)}">●</tspan> ${format(e.s.values[e.i])}</text>`).join('');
+    if (series.length === 1 && all.length > 2) {
+      const avg = all.reduce((a, b) => a + b, 0) / all.length;
+      marks += `<line class="average" x1="${M.left}" x2="${width - M.right}" y1="${y(avg)}" y2="${y(avg)}"/>
+        <text class="mark-label" x="${M.left + 6}" y="${y(avg) - 5}">average ${format(avg)}</text>`;
+    }
+  }
+
   container.innerHTML = `
-    <svg viewBox="0 0 ${width} ${HEIGHT}" height="${HEIGHT}" role="img" aria-label="Scrobbles over time">
-      <g class="grid axis">${grid.join('')}</g>
+    <svg viewBox="0 0 ${width} ${HEIGHT}" height="${HEIGHT}" role="img" aria-label="Line chart">
+      <g class="grid axis">${grid.join('')}${yearLines.join('')}</g>
       <g class="axis">${xLabels.join('')}</g>
       ${lines}
+      ${marks}
       <g class="hover" visibility="hidden">
-        <line class="crosshair" y1="${MARGIN.top}" y2="${MARGIN.top + plotH}"/>
+        <line class="crosshair" y1="${M.top}" y2="${M.top + plotH}"/>
         ${series.map(s => `<circle r="4.5" fill="${stroke(s)}" stroke="var(--panel)" stroke-width="2"/>`).join('')}
       </g>
-      <rect class="hit" x="${MARGIN.left - 6}" y="0" width="${plotW + 12}" height="${HEIGHT}" fill="transparent"/>
+      <rect class="hit" x="${M.left - 6}" y="0" width="${plotW + 12}" height="${HEIGHT}" fill="transparent"/>
     </svg>
     <div class="tooltip" hidden></div>`;
 
@@ -133,7 +171,7 @@ export function lineChart(container, { keys, series, labelFor, isYearStart, form
   const show = event => {
     const box = svg.getBoundingClientRect();
     const px = (event.clientX - box.left) * (width / box.width);
-    const i = Math.max(0, Math.min(keys.length - 1, Math.round(((px - MARGIN.left) / plotW) * (keys.length - 1))));
+    const i = Math.max(0, Math.min(keys.length - 1, Math.round(((px - M.left) / plotW) * (keys.length - 1))));
     crosshair.setAttribute('x1', x(i));
     crosshair.setAttribute('x2', x(i));
     series.forEach((s, n) => {
@@ -151,7 +189,7 @@ export function lineChart(container, { keys, series, labelFor, isYearStart, form
     const left = (x(i) / width) * box.width;
     const flip = left + tooltip.offsetWidth + 16 > box.width;
     tooltip.style.left = `${flip ? left - tooltip.offsetWidth - 12 : left + 12}px`;
-    tooltip.style.top = `${MARGIN.top}px`;
+    tooltip.style.top = `${M.top}px`;
   };
   const hide = () => { hover.setAttribute('visibility', 'hidden'); tooltip.hidden = true; };
   const hit = svg.querySelector('.hit');
@@ -226,12 +264,13 @@ function xLabels(labels, bands, height, minGap) {
 // ---------- Columns: one value per bucket, with an optional previous-period marker on each
 
 // values: numbers; previous: numbers or null per bucket; slot: the person's colour
-export function columnChart(container, { labels, values, previous, slot, tooltip, height = 230, minLabelGap = 30 }) {
+// Also draws a dashed average line, and each bar's value on top when the bars are wide enough to fit it.
+export function columnChart(container, { labels, values, previous, slot, tooltip, height = 230, minLabelGap = 30, averageLabel = 'average' }) {
   drawResponsive(container, () => {
     const width = container.clientWidth;
     const m = { top: 10, right: 8, bottom: 26, left: 44 };
     const plotW = width - m.left - m.right, plotH = height - m.top - m.bottom;
-    const max = Math.max(1, ...values, ...(previous || []).filter(v => v != null));
+    const max = Math.max(1, ...values, ...(previous || []).filter(v => v != null)) * 1.1;   // room for value labels
     const y = (v, top) => m.top + plotH - (v / top) * plotH;
     const axis = yAxis(max, y, m.left, width - m.right);
     const band = plotW / values.length;
@@ -245,12 +284,18 @@ export function columnChart(container, { labels, values, previous, slot, tooltip
       const x = bands[i].x + (band - barW) / 2 - 1;
       return `<line class="previous" x1="${x}" x2="${x + barW + 2}" y1="${y(v, axis.top)}" y2="${y(v, axis.top)}"/>`;
     })()).join('');
+    const avg = values.reduce((a, b) => a + b, 0) / (values.length || 1);
+    const average = avg > 0 ? `<line class="average" x1="${m.left}" x2="${width - m.right}" y1="${y(avg, axis.top)}" y2="${y(avg, axis.top)}"/>
+      <text class="mark-label" x="${width - m.right}" y="${y(avg, axis.top) - 5}" text-anchor="end">${averageLabel} ${avg >= 10 ? fmt(avg) : avg.toFixed(1)}</text>` : '';
+    const valueLabels = barW >= 22 ? values.map((v, i) => v ? `<text class="bar-value" x="${bands[i].x + band / 2}" y="${y(v, axis.top) - 5}" text-anchor="middle">${fmtTick(v)}</text>` : '').join('') : '';
     container.innerHTML = `
       <svg viewBox="0 0 ${width} ${height}" height="${height}" role="img">
         <g class="grid axis">${axis.svg}</g>
         <rect class="band-highlight" y="${m.top}" height="${plotH}" visibility="hidden"/>
         <path d="${bars}" fill="var(--person-${slot})"/>
         <g>${marks}</g>
+        ${average}
+        ${valueLabels}
         <g class="axis">${xLabels(labels, bands, height, minLabelGap)}</g>
         ${bands.map(b => `<rect class="band" x="${b.x}" y="0" width="${b.w}" height="${height}" fill="transparent"/>`).join('')}
       </svg>
@@ -276,7 +321,10 @@ export function stackedShareChart(container, { labels, series, tooltip, height =
       const below = series.slice(0, series.indexOf(s)).reduce((sum, t) => sum + (t.values[i] || 0), 0);
       const v = s.values[i] || 0;
       const h = v * plotH - GAP;
-      return h > 0 ? `<rect x="${bands[i].x + (band - barW) / 2}" y="${y(below + v) + GAP / 2}" width="${barW}" height="${h}" rx="2"/>` : '';
+      if (h <= 0) return '';
+      const rx = bands[i].x + (band - barW) / 2, ry = y(below + v) + GAP / 2;
+      const text = h >= 16 && barW >= 28 ? `<text class="segment-value" x="${rx + barW / 2}" y="${ry + h / 2}" text-anchor="middle" dominant-baseline="middle">${Math.round(v * 100)}</text>` : '';
+      return `<rect x="${rx}" y="${ry}" width="${barW}" height="${h}" rx="2"/>${text}`;
     }).join('')}</g>`).join('');
     const grid = [0, .25, .5, .75, 1].map(v => `<line x1="${m.left}" x2="${width - m.right}" y1="${y(v)}" y2="${y(v)}"/><text x="${m.left - 8}" y="${y(v)}" text-anchor="end" dominant-baseline="middle">${v * 100}%</text>`).join('');
     container.innerHTML = `
@@ -292,101 +340,53 @@ export function stackedShareChart(container, { labels, series, tooltip, height =
   });
 }
 
-// ---------- Taste scatter: one dot per shared item, a's plays across, b's plays up, both on log scales
-
-const hashJitter = key => { let h = 0; for (const c of key) h = (h * 31 + c.charCodeAt(0)) | 0; return ((h % 1000) / 1000) * 0.08 - 0.04; };
-
-// points: from pair.js tastePoints; ratio: b's scrobbles / a's scrobbles (the "same share" line)
-export function scatterChart(container, { points, a, b, ratio, noun, onPick }) {
-  drawResponsive(container, () => {
-    const width = container.clientWidth;
-    const size = Math.min(width, 520);
-    const m = { top: 14, right: 16, bottom: 40, left: 52 };
-    const plotW = width - m.left - m.right, plotH = size - m.top - m.bottom;
-    const max = Math.max(10, ...points.flatMap(p => [p.x, p.y]));
-    const top = Math.log10(max * 1.3);
-    const LOW = Math.log10(0.6);   // a little room below 1 play, so those dots sit clear of the axes
-    const sx = v => m.left + ((Math.log10(v) - LOW) / (top - LOW)) * plotW;
-    const sy = v => m.top + plotH - ((Math.log10(v) - LOW) / (top - LOW)) * plotH;
-    const ticks = [1, 10, 100, 1000, 10000, 100000].filter(t => Math.log10(t) <= top);
-    const grid = ticks.map(t => `<line x1="${sx(t)}" x2="${sx(t)}" y1="${m.top}" y2="${m.top + plotH}"/><line x1="${m.left}" x2="${m.left + plotW}" y1="${sy(t)}" y2="${sy(t)}"/>
-      <text x="${sx(t)}" y="${m.top + plotH + 16}" text-anchor="middle">${fmtTick(t)}</text><text x="${m.left - 8}" y="${sy(t)}" text-anchor="end" dominant-baseline="middle">${fmtTick(t)}</text>`).join('');
-    // "same share" line: y = x * ratio, clipped to the plot
-    const edge = 10 ** top;
-    const low = 10 ** LOW;
-    const x1 = Math.max(low, low / ratio), x2 = Math.min(edge, edge / ratio);
-    const dots = points.map((p, i) => {
-      const jx = 10 ** hashJitter(p.key), jy = 10 ** hashJitter(p.key + '~');
-      const slot = p.lean > 0 ? b.slot : a.slot;
-      return `<circle class="dot" data-i="${i}" cx="${sx(p.x * jx).toFixed(1)}" cy="${sy(p.y * jy).toFixed(1)}" r="4.5" fill="var(--person-${slot})"/>`;
-    }).join('');
-    container.innerHTML = `
-      <svg viewBox="0 0 ${width} ${size}" height="${size}" role="img" aria-label="Plays of each shared ${noun}: ${esc(a.profile.name)} across, ${esc(b.profile.name)} up">
-        <g class="grid axis">${grid}</g>
-        <line class="same-share" x1="${sx(x1)}" y1="${sy(x1 * ratio)}" x2="${sx(x2)}" y2="${sy(x2 * ratio)}"/>
-        <text class="corner" x="${m.left + 8}" y="${m.top + 14}">more ${esc(b.profile.name)}</text>
-        <text class="corner" x="${m.left + plotW - 8}" y="${m.top + plotH - 8}" text-anchor="end">more ${esc(a.profile.name)}</text>
-        <g class="dots">${dots}</g>
-        <text class="axis-title" x="${m.left + plotW / 2}" y="${size - 4}" text-anchor="middle">${esc(a.profile.name)}'s plays →</text>
-        <text class="axis-title" transform="translate(12 ${m.top + plotH / 2}) rotate(-90)" text-anchor="middle">${esc(b.profile.name)}'s plays →</text>
-      </svg>
-      <div class="tooltip" hidden></div>`;
-    const tooltip = container.querySelector('.tooltip');
-    const svg = container.querySelector('svg');
-    svg.querySelectorAll('.dot').forEach(dot => {
-      const p = points[+dot.dataset.i];
-      dot.addEventListener('pointerenter', () => {
-        const times = Math.exp(Math.abs(p.lean));
-        const who = p.lean > 0 ? b : a;
-        tooltip.innerHTML = `<b>${esc(p.name)}</b>${p.artist ? `<div class="muted">${esc(p.artist)}</div>` : ''}
-          <div><span>${esc(a.profile.name)}</span><span>${fmt(p.x)}</span></div><div><span>${esc(b.profile.name)}</span><span>${fmt(p.y)}</span></div>
-          <div class="total"><span>${times < 1.1 ? 'About the same share' : `${times.toFixed(1)}× bigger share for ${esc(who.profile.name)}`}</span><span></span></div>`;
-        tooltip.hidden = false;
-        const box = svg.getBoundingClientRect(), r = dot.getBoundingClientRect();
-        const left = r.right - box.left + 8;
-        tooltip.style.left = `${left + tooltip.offsetWidth > box.width ? r.left - box.left - tooltip.offsetWidth - 8 : left}px`;
-        tooltip.style.top = `${Math.max(0, r.top - box.top - 10)}px`;
-      });
-      dot.addEventListener('click', () => onPick?.(p));
-    });
-    svg.addEventListener('pointerleave', () => { tooltip.hidden = true; });
-  });
-}
-
 // ---------- Rank comparison: a's top items on the left, b's on the right, lines joining items on both lists
 
-export function slopeChart(container, { left, right, a, b, onPick }) {
+// The names sit above the scroll box, so they stay put while the rows scroll.
+export function slopeChart(container, { left, right, a, b, visibleRows, onPick }) {
+  const ROW = 24;
   drawResponsive(container, () => {
+    const scrolled = container.querySelector('.slope-scroll')?.scrollTop || 0;   // keep the place on redraws
     const width = container.clientWidth;
-    const ROW = 24, TOP = 30;
     const rows = Math.max(left.length, right.length);
-    const height = TOP + rows * ROW + 6;
+    const height = rows * ROW + 4;
     const col = Math.min(250, Math.max(130, width * 0.36));
-    const chars = Math.floor((col - 34) / 7.2);
-    const clip = s => s.length > chars ? `${s.slice(0, chars - 1)}…` : s;
-    const y = i => TOP + i * ROW + ROW / 2;
+    // SVG text can't ellipsis itself: estimate ~7.6px a character and leave room for the rank and any "#123"
+    const clip = (s, suffix) => {
+      const chars = Math.floor((col - 34 - (suffix ? suffix.length * 6.5 + 4 : 0)) / 7.6);
+      return s.length > chars ? `${s.slice(0, chars - 1)}…` : s;
+    };
+    const y = i => i * ROW + ROW / 2;
     const rightIndex = new Map(right.map((item, i) => [item.key, i]));
+    const leftKeys = new Set(left.map(item => item.key));
     const lines = left.map((item, i) => rightIndex.has(item.key)
       ? `<line class="link" data-key="${esc(item.key)}" x1="${col + 6}" y1="${y(i)}" x2="${width - col - 6}" y2="${y(rightIndex.get(item.key))}"/>` : '').join('');
-    const leftKeys = new Set(left.map(item => item.key));
     const label = (item, i, side) => {
       // not on the other list: show where it ranks for the other person instead of a line
       const onOther = side === 'left' ? rightIndex.has(item.key) : leftKeys.has(item.key);
-      const extra = onOther ? '' : ` <tspan class="off">${item.otherRank ? `#${item.otherRank}` : '–'}</tspan>`;
+      const suffix = onOther ? '' : item.otherRank ? `#${item.otherRank}` : '–';
+      const extra = suffix ? ` <tspan class="off">${suffix}</tspan>` : '';
       const x = side === 'left' ? col : width - col;
       const anchor = side === 'left' ? 'end' : 'start';
       const rank = side === 'left' ? `<text class="rank" x="4" y="${y(i)}">${item.rank}</text>` : `<text class="rank" x="${width - 4}" y="${y(i)}" text-anchor="end">${item.rank}</text>`;
-      return `${rank}<text class="item" data-key="${esc(item.key)}" x="${x}" y="${y(i)}" text-anchor="${anchor}">${esc(clip(item.name))}${extra}<title>${esc(item.name)}${item.artist ? ` – ${esc(item.artist)}` : ''}: #${item.rank} for ${esc((side === 'left' ? a : b).profile.name)}, ${item.otherRank ? `#${item.otherRank}` : 'not played'} for ${esc((side === 'left' ? b : a).profile.name)}</title></text>`;
+      return `${rank}<text class="item" data-key="${esc(item.key)}" x="${x}" y="${y(i)}" text-anchor="${anchor}">${esc(clip(item.name, suffix))}${extra}<title>${esc(item.name)}${item.artist ? ` – ${esc(item.artist)}` : ''}: ${fmt(item.plays)} plays, #${item.rank} for ${esc((side === 'left' ? a : b).profile.name)}, ${item.otherRank ? `#${item.otherRank}` : 'not played'} for ${esc((side === 'left' ? b : a).profile.name)}</title></text>`;
     };
     container.innerHTML = `
-      <svg class="slope" viewBox="0 0 ${width} ${height}" height="${height}" role="img" aria-label="Top lists side by side">
-        <text class="head" x="${col}" y="14" text-anchor="end" fill="var(--person-${a.slot})">${esc(a.profile.name)}</text>
-        <text class="head" x="${width - col}" y="14" fill="var(--person-${b.slot})">${esc(b.profile.name)}</text>
-        <g>${lines}</g>
-        ${left.map((item, i) => label(item, i, 'left')).join('')}
-        ${right.map((item, i) => label(item, i, 'right')).join('')}
-      </svg>`;
-    const svg = container.querySelector('svg');
+      <div class="slope-head" style="--col:${col}px">
+        <span style="color:var(--person-${a.slot})">${esc(a.profile.name)}</span>
+        <span style="color:var(--person-${b.slot})">${esc(b.profile.name)}</span>
+      </div>
+      <div class="slope-scroll">
+        <svg class="slope" viewBox="0 0 ${width} ${height}" height="${height}" role="img" aria-label="Top lists side by side">
+          <g>${lines}</g>
+          ${left.map((item, i) => label(item, i, 'left')).join('')}
+          ${right.map((item, i) => label(item, i, 'right')).join('')}
+        </svg>
+      </div>`;
+    const box = container.querySelector('.slope-scroll');
+    box.style.maxHeight = rows > visibleRows ? `${Math.min(ROW * (visibleRows + 0.5), window.innerHeight * 0.8)}px` : '';
+    box.scrollTop = scrolled;
+    const svg = box.querySelector('svg');
     const all = [...left, ...right];
     const highlight = key => svg.querySelectorAll('[data-key]').forEach(el => el.classList.toggle('lit', !!key && el.dataset.key === key));
     svg.addEventListener('pointerover', e => highlight(e.target.closest('[data-key]')?.dataset.key));
@@ -404,28 +404,32 @@ export function slopeChart(container, { left, right, a, b, onPick }) {
 export function bumpChart(container, { series, labels, longLabels, depth, slot, onPick }) {
   drawResponsive(container, () => {
     const width = container.clientWidth;
-    const m = { top: 14, right: Math.min(170, width * 0.32), bottom: 26, left: 34 };
+    const side = Math.min(170, width * 0.24);
+    const m = { top: 14, right: side, bottom: 26, left: side };
     const ROW = 26;
     const height = m.top + depth * ROW + m.bottom;
     const plotW = width - m.left - m.right;
     const x = i => m.left + (labels.length === 1 ? plotW / 2 : (i / (labels.length - 1)) * plotW);
     const y = r => m.top + (r - 0.5) * ROW;
-    const chars = Math.floor((m.right - 14) / 7);
+    const chars = Math.floor((side - 40) / 7);
     const clip = s => s.length > chars ? `${s.slice(0, chars - 1)}…` : s;
-    const grid = Array.from({ length: depth }, (_, r) => `<text x="${m.left - 12}" y="${y(r + 1)}" text-anchor="end" dominant-baseline="middle">${r + 1}</text>`).join('');
+    const grid = Array.from({ length: depth }, (_, r) => `<line x1="${m.left}" x2="${width - m.right}" y1="${y(r + 1)}" y2="${y(r + 1)}"/>`).join('');
     const xLabels = labels.map((l, i) => `<text x="${x(i)}" y="${height - 8}" text-anchor="middle">${esc(l)}</text>`).join('');
     const groups = series.map((s, n) => {
       let d = '', pen = 'M';
       s.ranks.forEach((r, i) => { if (r == null) { pen = 'M'; return; } d += `${pen}${x(i).toFixed(1)},${y(r).toFixed(1)}`; pen = 'L'; });
-      const dots = s.ranks.map((r, i) => r == null ? '' : `<circle cx="${x(i)}" cy="${y(r)}" r="4" data-tip="<b>${esc(s.name)}</b>${esc(longLabels[i])}: #${r}"/>`).join('');
+      const dots = s.ranks.map((r, i) => r == null ? '' : `<circle cx="${x(i)}" cy="${y(r)}" r="4" data-tip="<b>${esc(s.name)}</b>${esc(longLabels[i])}: #${r}${s.monthPlays ? `, ${fmt(s.monthPlays[i])} plays` : ''}<br><span class='muted'>${fmt(s.plays)} plays over the 12 months</span>"/>`).join('');
       const lastIndex = s.ranks.findLastIndex(r => r != null);
-      const label = lastIndex === labels.length - 1
-        ? `<text class="end-label" x="${x(lastIndex) + 10}" y="${y(s.ranks[lastIndex])}" dominant-baseline="middle">${esc(clip(s.name))}</text>` : '';
+      // names at both ends: first month on the left, last month on the right (with total plays)
+      const label = (lastIndex === labels.length - 1
+        ? `<text class="end-label" x="${x(lastIndex) + 10}" y="${y(s.ranks[lastIndex])}" dominant-baseline="middle">#${s.ranks[lastIndex]} ${esc(clip(s.name))}</text>` : '')
+        + (s.ranks[0] != null
+        ? `<text class="end-label" x="${x(0) - 10}" y="${y(s.ranks[0])}" text-anchor="end" dominant-baseline="middle">${esc(clip(s.name))} #${s.ranks[0]}</text>` : '');
       return `<g class="bump" data-n="${n}">${d ? `<path d="${d}"/>` : ''}${dots}${label}</g>`;
     }).join('');
     container.innerHTML = `
       <svg class="bump-chart" viewBox="0 0 ${width} ${height}" height="${height}" style="--hi:var(--person-${slot})" role="img" aria-label="Rank of top artists each month">
-        <g class="axis">${grid}${xLabels}</g>${groups}
+        <g class="grid">${grid}</g><g class="axis">${xLabels}</g>${groups}
       </svg>
       <div class="tooltip" hidden></div>`;
     const svg = container.querySelector('svg');

@@ -23,9 +23,11 @@ const iconButton = (action, label) =>
 export function renderPeople(people) {
   $('#people').innerHTML = people.map(person => {
     const name = person.profile?.name || person.username;
-    const avatar = person.profile?.image
-      ? `<img class="avatar" src="${esc(person.profile.image)}" alt="" loading="lazy">`
-      : `<span class="avatar" aria-hidden="true">${esc(name[0].toUpperCase())}</span>`;
+    // a little record: grooves round a label in the person's colour (their Last.fm picture if they have one)
+    const label = person.profile?.image
+      ? `<span class="label" style="background-image:url('${esc(person.profile.image)}')"></span>`
+      : `<span class="label">${esc(name[0].toUpperCase())}</span>`;
+    const avatar = `<span class="avatar ${person.status === 'loading' ? 'spinning' : ''}" aria-hidden="true">${label}</span>`;
     const link = person.profile ? `<a href="${esc(person.profile.url)}" target="_blank" rel="noopener">${esc(name)}</a>` : esc(name);
     const actions = {
       loading: iconButton('pause', 'Pause download'),

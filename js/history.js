@@ -9,7 +9,7 @@
 
 import { call, LastfmError } from './api.js';
 import { PAGE_SIZE, SAVE_EVERY_PAGES } from './config.js';
-import { HISTORY, TAGS, load, save } from './store.js';
+import { HISTORY, TAGS, PEOPLE, load, save, keys, loadAll } from './store.js';
 import { nowSec } from './util.js';
 
 export async function fetchProfile(username, signal) {
@@ -87,6 +87,7 @@ async function finishPending(username, record, signal, report) {
   record.watermark = job.to;
   delete record.pending;
   await save(HISTORY, record);
+  await save(PEOPLE, { key: record.key, name: username, scrobbles: record.rows.length, updated: Date.now() });
   report(job.totalPages, job.totalPages, 0);
 }
 
@@ -117,4 +118,13 @@ export async function artistTags(artist, signal) {
   }
   await save(TAGS, { key, tags });
   return tags;
+}
+
+// Everyone with a history saved in this browser, newest first. Histories saved before the PEOPLE index
+// existed only have their lowercased key, so they're listed by that.
+export async function savedPeople() {
+  const [index, all] = await Promise.all([loadAll(PEOPLE), keys(HISTORY)]);
+  const known = new Map((index || []).map(p => [p.key, p]));
+  for (const key of all || []) if (!known.has(key)) known.set(key, { key, name: key, scrobbles: null, updated: 0 });
+  return [...known.values()].filter(p => (all || []).includes(p.key)).sort((a, b) => b.updated - a.updated || a.name.localeCompare(b.name));
 }

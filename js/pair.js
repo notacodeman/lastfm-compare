@@ -1,4 +1,4 @@
-// Maths for the side-by-side charts: taste scatter, rank comparison, who played things first,
+// Maths for the side-by-side charts: leans, rank comparison, who played things first,
 // listening clocks and month-by-month ranks. Pure functions over summaries (analyze.js) and rows.
 
 import { summarize } from './analyze.js';
@@ -6,7 +6,7 @@ import { rowsBetween } from './report.js';
 
 const DAY = 86400;
 
-// ---------- Taste scatter: items both people played, with how far each leans to one of them
+// ---------- Leans: items both people played, with how far each leans to one of them
 
 // lean > 0: b gives it a bigger share of their listening than a does. 1 = e times bigger.
 export function tastePoints(a, b, kind, limit) {
@@ -89,9 +89,13 @@ export function monthlyRanks(rows, months, size, depth) {
   const all = { from: -Infinity, to: Infinity };
   const whole = summarize(rowsBetween(rows, months[0].from, months.at(-1).to), all);
   const top = [...whole.artists].sort((p, q) => q[1].plays - p[1].plays).slice(0, size);
-  const perMonth = months.map(m => ranks(summarize(rowsBetween(rows, m.from, m.to), all), 'artists').rank);
+  const perMonth = months.map(m => {
+    const summary = summarize(rowsBetween(rows, m.from, m.to), all);
+    return { summary, rank: ranks(summary, 'artists').rank };
+  });
   return top.map(([key, item]) => ({
     key, name: item.name, plays: item.plays,
-    ranks: perMonth.map(rank => { const r = rank.get(key); return r && r <= depth ? r : null; }),
+    ranks: perMonth.map(({ rank }) => { const r = rank.get(key); return r && r <= depth ? r : null; }),
+    monthPlays: perMonth.map(({ summary }) => summary.artists.get(key)?.plays || 0),
   }));
 }

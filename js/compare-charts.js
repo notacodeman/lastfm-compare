@@ -1,11 +1,11 @@
-// Compare tab charts that look at people side by side: taste scatter, "leans to" lists, top-25 ranking,
+// Compare tab charts that look at people side by side: top-100 ranking, "leans to" lists,
 // who played things first, and listening clocks.
 
 import { $, esc, fmt, fmtDate, fitRows, artistLink } from './util.js';
-import { PANEL_ROWS, SCATTER_POINTS, LEAN_LIST, SLOPE_SIZE, FIRST_LEAD_DAYS } from './config.js';
+import { PANEL_ROWS, LEAN_CANDIDATES, LEAN_LIST, SLOPE_SIZE, SLOPE_VISIBLE_ROWS, FIRST_LEAD_DAYS } from './config.js';
 import { tastePoints, lopsided, rankPairs, whoWasFirst, clockShares } from './pair.js';
 import { rowsBetween } from './report.js';
-import { scatterChart, slopeChart, lineChart, drawResponsive } from './charts.js';
+import { slopeChart, lineChart, drawResponsive } from './charts.js';
 
 const NOUN = { artists: 'artists', albums: 'albums', tracks: 'tracks' };
 const swatch = slot => `<span class="swatch" style="--color:var(--person-${slot})"></span>`;
@@ -18,16 +18,7 @@ const artistOf = item => item.artist || item.name;
 
 export function renderPair({ a, b, sa, sb, kind, onArtist }) {
   const noun = NOUN[kind];
-  const points = tastePoints(sa, sb, kind, SCATTER_POINTS);
-  $('#scatterTitle').textContent = `Shared ${noun}: plays each`;
-  if (points.length < 2) {
-    $('#scatterChart').innerHTML = `<p class="muted">Not enough shared ${noun} in this period.</p>`;
-    $('#scatterNote').textContent = '';
-  } else {
-    scatterChart($('#scatterChart'), { points, a, b, ratio: sb.scrobbles / sa.scrobbles, noun, onPick: p => onArtist(artistOf(p)) });
-    $('#scatterNote').textContent = `${fmt(points.length)} most played shared ${noun}, on log scales. The dashed line is where both give it the same share of their listening; dots are coloured by who it leans to.`;
-  }
-
+  const points = tastePoints(sa, sb, kind, LEAN_CANDIDATES);
   const sides = lopsided(points, LEAN_LIST);
   const leanList = (person, list, other) => `<h3><span>${swatch(person.slot)}Leans to ${esc(person.profile.name)}</span><small>${fmt(list.length)}</small></h3>
     <ul class="unique-list">${list.map(p => {
@@ -40,8 +31,9 @@ export function renderPair({ a, b, sa, sb, kind, onArtist }) {
   document.querySelectorAll('#pair .unique-list').forEach(list => fitRows(list, PANEL_ROWS));
 
   const ranks = rankPairs(sa, sb, kind, SLOPE_SIZE);
-  $('#slopeTitle').textContent = `Top ${SLOPE_SIZE} ${noun} side by side`;
-  slopeChart($('#slopeChart'), { ...ranks, a, b, onPick: item => onArtist(artistOf(item)) });
+  const both = ranks.left.filter(l => ranks.right.some(r => r.key === l.key)).length;
+  $('#slopeTitle').innerHTML = `<span>Top ${SLOPE_SIZE} ${noun} side by side</span><small>${fmt(both)} on both lists</small>`;
+  slopeChart($('#slopeChart'), { ...ranks, a, b, visibleRows: SLOPE_VISIBLE_ROWS, onPick: item => onArtist(artistOf(item)) });
 }
 
 // ---------- Who played it first (all time)
@@ -79,7 +71,7 @@ export function renderClocks({ people, range }) {
   const options = { showTotal: false, format: v => `${(v * 100).toFixed(v < 0.1 ? 1 : 0)}%` };
   drawResponsive($('#hourChart'), () => lineChart($('#hourChart'), {
     ...options, max: top('hours'), keys: Array.from({ length: 24 }, (_, h) => String(h)), series: series('hours'),
-    labelFor: (key, short) => short ? (+key % 6 ? '' : hour(+key)) : `${hour(+key)}–${hour((+key + 1) % 24)}`,
+    labelFor: (key, short) => short ? hour(+key) : `${hour(+key)}–${hour((+key + 1) % 24)}`,
   }));
   drawResponsive($('#weekdayChart'), () => lineChart($('#weekdayChart'), {
     ...options, max: top('weekdays'), keys: DAYS, series: series('weekdays'), labelFor: key => key,

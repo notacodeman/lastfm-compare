@@ -2,16 +2,18 @@
 // If IndexedDB is unavailable (private windows, blocked storage) everything still works, just without saving.
 
 const DB_NAME = 'scrobble-compare';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 export const HISTORY = 'history';   // { key: username lowercased, rows, watermark, pending? }
 export const TAGS = 'tags';         // { key: artist name lowercased, tags: [names] }
+export const PEOPLE = 'people';     // { key, name, scrobbles, updated }: a small index of saved histories (added in v2)
+const STORES = [HISTORY, TAGS, PEOPLE];
 
 let dbPromise;
 function open() {
   dbPromise ??= new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION);
     req.onupgradeneeded = () => {
-      for (const name of [HISTORY, TAGS]) req.result.createObjectStore(name, { keyPath: 'key' });
+      for (const name of STORES) if (!req.result.objectStoreNames.contains(name)) req.result.createObjectStore(name, { keyPath: 'key' });
     };
     req.onsuccess = () => resolve(req.result);
     req.onerror = () => reject(req.error);
@@ -32,5 +34,6 @@ function run(storeName, mode, action) {
 export const load = (storeName, key) => run(storeName, 'readonly', s => s.get(key));
 export const save = (storeName, value) => run(storeName, 'readwrite', s => s.put(value));
 export const remove = (storeName, key) => run(storeName, 'readwrite', s => s.delete(key));
-export const clearAll = () => Promise.all([HISTORY, TAGS].map(name => run(name, 'readwrite', s => s.clear())));
+export const clearAll = () => Promise.all(STORES.map(name => run(name, 'readwrite', s => s.clear())));
+export const loadAll = storeName => run(storeName, 'readonly', s => s.getAll());
 export const keys = storeName => run(storeName, 'readonly', s => s.getAllKeys());

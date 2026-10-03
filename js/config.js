@@ -24,9 +24,10 @@ export const GENRE_ARTISTS_PER_MONTH = 15;  // the same, per month in "genres mo
 export const GENRES_SHOWN = 12;             // genres listed in a report / compared
 export const GENRES_STACKED = 7;            // genres in the month-by-month chart; the rest is "Other"
 
-export const SCATTER_POINTS = 400;          // most-played shared items drawn in the taste scatter
-export const LEAN_LIST = 25;                // "leans to" lists beside the scatter
-export const SLOPE_SIZE = 25;               // top N in the side-by-side ranking
+export const LEAN_CANDIDATES = 400;         // most-played shared items considered for the "leans to" lists
+export const LEAN_LIST = 25;                // items in each "leans to" list
+export const SLOPE_SIZE = 100;              // top N in the side-by-side ranking
+export const SLOPE_VISIBLE_ROWS = 25;       // rows shown before it scrolls
 export const FIRST_LEAD_DAYS = 30;          // who played it first: ahead by at least this long
 export const BUMP_ARTISTS = 10;             // reports: artists followed in the bump chart
 export const BUMP_DEPTH = 15;               // ranks shown; lower counts as off the chart
